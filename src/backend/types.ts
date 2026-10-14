@@ -1,4 +1,4 @@
-import type { AdKind, FlagId, Game, GameState, QuestId, Tile } from '../game/rules';
+import type { AdKind, DecoId, FlagId, Game, GameState, ProductId, QuestId, Tile } from '../game/rules';
 
 export interface WorldTile { q: number; r: number; owner: string; flag: FlagId }
 export interface LeaderRow { username: string; tiles: number; coins: number; flag: FlagId; me: boolean }
@@ -25,6 +25,11 @@ export interface Backend {
   leaderboard(): Promise<LeaderRow[]>;
   account(): Account;
   linkEmail(email: string): Promise<void>;
+  catchCreature(): Promise<{ s: GameState; reward: number }>;
+  decorate(q: number, r: number, id: DecoId): Promise<GameState>;
+  claimAchievement(id: string): Promise<GameState>;
+  /** Credits a purchase. Only test purchases for now: real ones need store receipts checked by the server. */
+  purchase(id: ProductId): Promise<GameState>;
   /** Erases the player's game (and online account), then starts a fresh one. */
   resetAll(): Promise<GameState>;
   demo?: { enabled(): boolean; toggle(): Promise<GameState>; gift(): Promise<GameState> };

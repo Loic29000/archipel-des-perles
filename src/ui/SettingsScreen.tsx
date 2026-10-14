@@ -179,6 +179,16 @@ function InfoPanel({ c, online, account }: { c: Palette; online: boolean; accoun
         <Rule c={c} title="Passeport">
           <P c={c}>Les carnets se gagnent en explorant tous les biomes ({Object.values(BIOMES).join(', ').toLowerCase()}), en agrandissant votre archipel et en trouvant des raretés. Ils donnent un bonus de rente permanent : +5 % dès le premier carnet, puis +10 % à partir de 11 carnets.</P>
         </Rule>
+        <Rule c={c} title="Événements">
+          <P c={c}>Tous les 14 jours, un événement de 4 jours fait apparaître une créature près de votre archipel. Touchez-la pour gagner des perles, une fois par heure.</P>
+          {R.EVENTS.map(e => <P key={e.id} c={c}>{e.name} : {e.desc}</P>)}
+        </Rule>
+        <Rule c={c} title="Succès et décorations">
+          <P c={c}>Chaque succès débloqué (biomes, taille de l’archipel, raretés, série, phares, décorations, créatures) rapporte des perles une fois. Les décorations (cabane, voilier, mouettes, coffre, tortue) s’achètent en doublons et s’affichent sur la carte.</P>
+        </Rule>
+        <Rule c={c} title="Achats">
+          <P c={c}>Des packs de perles et l’option « Sans pubs » sont proposés au comptoir. « Sans pubs » donne les récompenses sans regarder de publicité. Pour l’instant les achats sont en mode test : aucun paiement n’est demandé.</P>
+        </Rule>
         <Rule c={c} title="Quêtes, série et biome de la semaine">
           <P c={c}>Trois quêtes du jour rapportent des perles. Une connexion par jour fait grandir votre série (jusqu’à 5 perles le 7e jour). Chaque semaine, un biome à l’honneur rapporte +25 %.</P>
         </Rule>

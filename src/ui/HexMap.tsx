@@ -1,10 +1,10 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, GestureResponderEvent, LayoutChangeEvent, PanResponder, StyleSheet, View } from 'react-native';
-import Svg, { Defs, LinearGradient, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
+import { Animated, Easing, GestureResponderEvent, LayoutChangeEvent, PanResponder, Pressable, StyleSheet, View } from 'react-native';
+import Svg, { Circle, Defs, LinearGradient, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { WorldTile } from '../backend/types';
 import { GameState, isClaimable, tileCount } from '../game/rules';
 import { biomeAt, key, neighborsOf, parseKey } from '../game/world';
-import { hexPoints, Island, IslandBase, tileHash } from './island';
+import { CreatureArt, hexPoints, Island, IslandBase, tileHash } from './island';
 import { FLAG_COLORS, Palette } from './theme';
 
 interface Props {
@@ -20,6 +20,9 @@ interface Props {
   /** Screen space covered by floating panels; the camera centres on what is left. */
   insetTop?: number;
   insetBottom?: number;
+  /** An event creature swimming at a sea hex; tapping it calls onCreature. */
+  creature?: { q: number; r: number; kind: 'tortue' | 'coquillage' | 'baleine' } | null;
+  onCreature?: () => void;
 }
 
 const SQ3 = Math.sqrt(3);
@@ -33,7 +36,7 @@ function pixToHex(x: number, y: number, size: number): [number, number] {
   else if (dr > ds) r = -q - s;
   return [q, r];
 }
-function HexMapImpl({ s, others, selected, onSelect, focus, zoom, c, disabled, insetTop = 0, insetBottom = 0 }: Props) {
+function HexMapImpl({ s, others, selected, onSelect, focus, zoom, c, disabled, insetTop = 0, insetBottom = 0, creature, onCreature }: Props) {
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [cam, setCam] = useState({ x: 0, y: 0 });
   const size = zoom;
@@ -162,7 +165,7 @@ function HexMapImpl({ s, others, selected, onSelect, focus, zoom, c, disabled, i
             const x = t.p.x + ox, y = t.p.y + oy;
             if (t.kind === 'own') {
               const tile = s.tiles[k];
-              return <Island key={k} x={x} y={y} s={size} c={c} biome={tile.biome} kind="own" seed={tileHash(t.q, t.r)} rar={tile.rar} level={tile.level} flag={FLAG_COLORS[s.flag]} />;
+              return <Island key={k} x={x} y={y} s={size} c={c} biome={tile.biome} kind="own" seed={tileHash(t.q, t.r)} rar={tile.rar} level={tile.level} flag={FLAG_COLORS[s.flag]} deco={tile.deco} />;
             }
             if (t.kind === 'other') {
               return <Island key={k} x={x} y={y} s={size} c={c} biome={biomeAt(t.q, t.r)} kind="other" seed={tileHash(t.q, t.r)}
@@ -172,8 +175,38 @@ function HexMapImpl({ s, others, selected, onSelect, focus, zoom, c, disabled, i
           })}
         </Svg>
       )}
+      {creature && box.w > 0 && (() => {
+        const p = toPix(creature.q, creature.r, size);
+        return <Creature x={p.x + ox} y={p.y + oy} size={size} kind={creature.kind} onPress={onCreature} disabled={disabled} />;
+      })()}
       {sel && box.w > 0 && <SelectRing x={sel.x + ox} y={sel.y + oy} size={size} color={c.accent} />}
     </View>
+  );
+}
+
+/** A bobbing event creature the player can tap. */
+function Creature({ x, y, size, kind, onPress, disabled }: { x: number; y: number; size: number; kind: 'tortue' | 'coquillage' | 'baleine'; onPress?: () => void; disabled?: boolean }) {
+  const bob = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(bob, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(bob, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [bob]);
+  const d = Math.max(44, size * 1.7);
+  return (
+    <Animated.View style={{ position: 'absolute', left: x - d / 2, top: y - d / 2, width: d, height: d,
+      transform: [{ translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [-4, 4] }) }, { rotate: bob.interpolate({ inputRange: [0, 1], outputRange: ['-6deg', '6deg'] }) }] }}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Créature de l’événement" disabled={disabled} onPress={onPress} hitSlop={10} style={{ width: d, height: d }}>
+        <Svg width={d} height={d} viewBox="-24 -24 48 48">
+          <Circle cx={0} cy={0} r={22} fill="#ffffff" opacity={0.35} />
+          <Circle cx={0} cy={0} r={22} fill="none" stroke="#f2b225" strokeWidth={2} strokeDasharray="4,4" />
+          <CreatureArt kind={kind} />
+        </Svg>
+      </Pressable>
+    </Animated.View>
   );
 }
 

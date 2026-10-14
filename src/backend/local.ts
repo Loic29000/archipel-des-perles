@@ -23,7 +23,7 @@ export function createLocalBackend(): Backend {
     const saved = await loadJSON<Save>(slot());
     if (saved) {
       // time spent with the app closed counts at normal speed, even in demo mode
-      s = saved.s; gt = saved.gt + (Date.now() - saved.real); real = Date.now();
+      s = R.upgradeSave(saved.s); gt = saved.gt + (Date.now() - saved.real); real = Date.now();
     } else {
       gt = Date.now(); real = Date.now();
       s = R.newState(gt);
@@ -60,6 +60,10 @@ export function createLocalBackend(): Backend {
     upgrade: (q, r) => apply(() => R.upgradeTile(s, q, r, now())),
     buyFlag: id => apply(() => R.buyFlag(s, id, now())),
     setUsername: name => apply(() => ({ ...s, username: name.trim().slice(0, 20) || s.username })),
+    catchCreature: () => apply(() => R.catchCreature(s, now())),
+    decorate: (q, r, id) => apply(() => R.decorate(s, q, r, id, now())),
+    claimAchievement: id => apply(() => R.claimAchievement(s, id)),
+    purchase: id => apply(() => R.grantPurchase(s, id)),
     async applyReferral() {
       throw new R.GameError('Le parrainage fonctionne avec un compte en ligne.');
     },

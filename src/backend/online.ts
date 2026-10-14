@@ -56,6 +56,10 @@ export function createOnlineBackend(url: string, anonKey: string): Backend {
     upgrade: async (q, r) => (await rpc('upgrade_tile', { tq: q, tr: r })).s,
     buyFlag: async id => (await rpc('buy_flag', { fid: id })).s,
     setUsername: async name => (await rpc('set_username', { name })).s,
+    catchCreature: async () => { const e = await rpc('catch_creature'); return { s: e.s, reward: e.reward ?? 0 }; },
+    decorate: async (q, r, id) => (await rpc('decorate_tile', { tq: q, tr: r, did: id })).s,
+    claimAchievement: async id => (await rpc('claim_achievement', { aid: id })).s,
+    purchase: async id => (await rpc('test_purchase', { product: id })).s,
     applyReferral: async code => { const e = await rpc('apply_referral', { code }); return { s: e.s, reward: e.reward ?? 0 }; },
     async othersNear(q, r, radius) {
       const { data, error } = await sb.rpc('tiles_near', { cq: q, cr: r, radius });

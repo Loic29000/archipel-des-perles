@@ -293,8 +293,8 @@ export function RevealCard({ c, tile, rentPerDay, onClose }: { c: Palette; tile:
 }
 
 // ---------------------------------------------------------------- generic message card
-export function MessageCard({ c, title, body, action = 'Compris', onClose, children, icon }: {
-  c: Palette; title: string; body: string; action?: string; onClose: () => void; children?: React.ReactNode; icon?: React.ReactNode;
+export function MessageCard({ c, title, body, action = 'Compris', onClose, children, icon, onCancel }: {
+  c: Palette; title: string; body: string; action?: string; onClose: () => void; children?: React.ReactNode; icon?: React.ReactNode; onCancel?: () => void;
 }) {
   const pop = useRef(new Animated.Value(0)).current;
   useEffect(() => { Animated.spring(pop, { toValue: 1, friction: 6, tension: 80, useNativeDriver: true }).start(); }, [pop]);
@@ -308,6 +308,7 @@ export function MessageCard({ c, title, body, action = 'Compris', onClose, child
         <T c={c} muted style={{ lineHeight: 20, textAlign: icon ? 'center' : 'left' }}>{body}</T>
         {children}
         <Btn c={c} label={action} onPress={onClose} style={{ alignSelf: icon ? 'stretch' : 'flex-start' }} />
+        {onCancel && <Btn c={c} kind="secondary" label="Annuler" onPress={onCancel} style={{ alignSelf: icon ? 'stretch' : 'flex-start' }} />}
       </Animated.View>
     </View>
   );

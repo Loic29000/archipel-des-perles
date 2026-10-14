@@ -1,5 +1,6 @@
 import React from 'react';
 import { Circle, Ellipse, G, Path, Polygon, Text as SvgText } from 'react-native-svg';
+import type { DecoId } from '../game/rules';
 import type { Biome } from '../game/world';
 import { Palette, RARITY_COLORS } from './theme';
 
@@ -99,6 +100,84 @@ function Scenery({ biome, c, v }: { biome: Biome; c: Palette; v: number }) {
   }
 }
 
+/** A decoration drawn around (0,0) at unit scale 1 = 1/30 of an island radius. */
+export function DecoArt({ id }: { id: DecoId }) {
+  switch (id) {
+    case 'cabane':
+      return (
+        <G>
+          <Polygon points="-7,0 7,0 7,-8 -7,-8" fill="#c98b4a" stroke="#6b4423" strokeWidth={1} />
+          <Polygon points="-10,-7 0,-15 10,-7" fill="#b5532f" stroke="#6b4423" strokeWidth={1} />
+          <Polygon points="-2,0 2,0 2,-5 -2,-5" fill="#5b3a1e" />
+          <Polygon points="3.5,-6 6,-6 6,-3.5 3.5,-3.5" fill="#ffe08a" />
+        </G>
+      );
+    case 'bateau':
+      return (
+        <G>
+          <Path d="M-11 0 L11 0 L7 5 L-7 5 Z" fill="#8a5a2b" stroke="#5b3a1e" strokeWidth={1} />
+          <Path d="M0 0 V-18" stroke="#5b3a1e" strokeWidth={1.4} />
+          <Polygon points="1,-17 1,-2 11,-2" fill="#ffffff" stroke="#cfd8dc" strokeWidth={0.8} />
+          <Polygon points="-1,-15 -1,-2 -8,-2" fill="#f2f2f2" stroke="#cfd8dc" strokeWidth={0.8} />
+          <Path d="M-13 7 q3 -2 6 0 t6 0 t6 0 t6 0" stroke="#ffffff" strokeWidth={1.2} fill="none" opacity={0.8} />
+        </G>
+      );
+    case 'mouettes':
+      return (
+        <G>
+          {[[-8, 0, 1], [6, -6, 0.8], [12, 3, 0.65]].map(([x, y, k], i) => (
+            <Path key={i} d={`M${x - 6 * k} ${y} q${3 * k} ${-4 * k} ${6 * k} 0 q${3 * k} ${-4 * k} ${6 * k} 0`} stroke="#ffffff" strokeWidth={2} fill="none" strokeLinecap="round" />
+          ))}
+        </G>
+      );
+    case 'tresor':
+      return (
+        <G>
+          <Polygon points="-8,0 8,0 8,-8 -8,-8" fill="#8a5a2b" stroke="#4a2e16" strokeWidth={1} />
+          <Path d="M-8 -8 Q0 -15 8 -8" fill="#a8723c" stroke="#4a2e16" strokeWidth={1} />
+          <Path d="M-8 -6 H8" stroke="#f2b225" strokeWidth={1.6} />
+          <Polygon points="-1.5,-7 1.5,-7 1.5,-3 -1.5,-3" fill="#f2b225" />
+          <Circle cx={-4} cy={-11} r={1.6} fill="#ffe08a" />
+          <Circle cx={3} cy={-12} r={1.3} fill="#ffffff" />
+        </G>
+      );
+    case 'tortue':
+      return (
+        <G>
+          <Ellipse cx={-9} cy={-3} rx={3} ry={2.4} fill="#7cc576" />
+          {[[-5, 2], [5, 2], [-5, -8], [5, -8]].map(([x, y], i) => <Ellipse key={i} cx={x} cy={y} rx={2.6} ry={1.8} fill="#7cc576" />)}
+          <Ellipse cx={0} cy={-3} rx={7.5} ry={6} fill="#3f8f4a" stroke="#2c6b3a" strokeWidth={1} />
+          <Path d="M-4 -6 L0 -3 L4 -6 M0 -3 V2 M-4 0 L0 -3 L4 0" stroke="#a6d68f" strokeWidth={1} fill="none" />
+          <Circle cx={-10} cy={-3.5} r={0.7} fill="#1b3a20" />
+        </G>
+      );
+  }
+}
+
+/** Event creatures, drawn around (0,0) in a 40×40 box. */
+export function CreatureArt({ kind }: { kind: 'tortue' | 'coquillage' | 'baleine' }) {
+  if (kind === 'tortue') return <G transform="scale(1.5)"><DecoArt id="tortue" /></G>;
+  if (kind === 'coquillage') {
+    return (
+      <G>
+        <Path d="M0 12 C-14 12 -16 -2 -10 -9 C-5 -14 5 -14 10 -9 C16 -2 14 12 0 12 Z" fill="#ffd6c2" stroke="#e2694f" strokeWidth={1.5} />
+        <Path d="M0 12 V-12 M0 12 L-7 -10 M0 12 L7 -10 M0 12 L-12 -3 M0 12 L12 -3" stroke="#e2694f" strokeWidth={1.2} />
+        <Circle cx={0} cy={2} r={4} fill="#ffffff" stroke="#c9b8e8" strokeWidth={1} />
+        <Circle cx={-1.3} cy={0.8} r={1.3} fill="#ffffff" />
+      </G>
+    );
+  }
+  return (
+    <G>
+      <Path d="M-16 2 C-16 -9 -4 -12 6 -9 C13 -7 16 -2 16 2 C10 6 -10 7 -16 2 Z" fill="#4a6fa5" stroke="#2f4a73" strokeWidth={1.2} />
+      <Path d="M-16 2 C-10 6 10 6 16 2 C12 8 -10 9 -16 2 Z" fill="#cfe0f2" />
+      <Path d="M16 0 L22 -6 L21 2 L23 7 Z" fill="#4a6fa5" stroke="#2f4a73" strokeWidth={1} />
+      <Circle cx={-9} cy={-2} r={1.2} fill="#ffffff" />
+      <Path d="M-4 -11 q-2 -5 -5 -6 M-4 -11 q1 -5 4 -7" stroke="#bfe9ef" strokeWidth={1.6} fill="none" strokeLinecap="round" />
+    </G>
+  );
+}
+
 export type IslandKind = 'own' | 'other' | 'free';
 
 /** Shadow and surf under an island; drawn in a first pass so neighbours never cover each other. */
@@ -112,9 +191,9 @@ export function IslandBase({ x, y, s, c, kind }: { x: number; y: number; s: numb
   );
 }
 
-export function Island({ x, y, s, c, biome, kind, seed, rar = 0, level = 0, flag, label }: {
+export function Island({ x, y, s, c, biome, kind, seed, rar = 0, level = 0, flag, label, deco }: {
   x: number; y: number; s: number; c: Palette; biome: Biome; kind: IslandKind; seed: number;
-  rar?: number; level?: number; flag?: string; label?: string;
+  rar?: number; level?: number; flag?: string; label?: string; deco?: DecoId | null;
 }) {
   const k = s / 30;
   const detail = s > 13;
@@ -174,6 +253,15 @@ export function Island({ x, y, s, c, biome, kind, seed, rar = 0, level = 0, flag
           {Array.from({ length: level }, (_, i) => <Circle key={i} cx={x + s * 0.38 + i * s * 0.1} cy={y + s * 0.15} r={s * 0.035} fill={c.accent} />)}
         </G>
       )}
+      {detail && deco && (() => {
+        // the boat sails beside the island, gulls fly above, the rest sits on the shore
+        const [dx, dy] = deco === 'bateau' ? [0.78, 0.5] : deco === 'mouettes' ? [0.05, -0.62] : [-0.42, 0.42];
+        return (
+          <G transform={`translate(${(x + dx * s).toFixed(1)} ${(y + dy * s).toFixed(1)}) scale(${(k * 0.85).toFixed(3)})`}>
+            <DecoArt id={deco} />
+          </G>
+        );
+      })()}
       {legend && detail && (
         <G>
           {[[-0.55, -0.55], [0.6, 0.35], [0.1, -0.78]].map(([dx, dy], i) => {

@@ -3,14 +3,14 @@
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'fs';
 import { biomeAt } from '../src/game/world';
-import { questsFor } from '../src/game/rules';
+import { ACHIEVEMENTS, DAY, eventAt, HOUR, questsFor } from '../src/game/rules';
 const db = new PGlite();
 const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as any[];
 (async () => {
   await db.exec(`create role anon; create role authenticated; create schema auth;
     create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true),'')::uuid $$;`);
-  for (const m of ['0001_init.sql', '0002_delete_account.sql']) await db.exec(readFileSync(new URL(`../supabase/migrations/${m}`, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_delete_account.sql', '0003_engagement.sql']) await db.exec(readFileSync(new URL(`../supabase/migrations/${m}`, import.meta.url), 'utf8'));
   // world parity
   let bad = 0;
   for (let a = -30; a <= 30; a += 3) for (let b = -30; b <= 30; b += 3) {
@@ -23,6 +23,16 @@ const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as
     const sqlIds = row.j.map((x: any) => x.id).join(), js = questsFor(d, 0).join();
     console.log('quests', d, sqlIds === js ? 'ok' : `MISMATCH ${sqlIds} vs ${js}`);
   }
+  // event calendar parity, every 7 h over 60 days
+  let evBad = 0;
+  for (let t = 1.79e12; t < 1.79e12 + 60 * DAY; t += 7 * HOUR) {
+    const [row] = await q('select event_at($1::bigint) e', [Math.round(t)]);
+    if (row.e !== (eventAt(Math.round(t))?.id ?? null)) evBad++;
+  }
+  console.log('event mismatches', evBad);
+  let achBad = 0;
+  for (const a of ACHIEVEMENTS) { const [row] = await q('select ach_reward($1) r', [a.id]); if (row.r !== a.reward) achBad++; }
+  console.log('achievement reward mismatches', achBad, 'of', ACHIEVEMENTS.length);
   const u1 = '11111111-1111-1111-1111-111111111111', u2 = '22222222-2222-2222-2222-222222222222';
   await q('insert into auth.users values ($1),($2)', [u1, u2]);
   const as = async (u: string, sql: string, p: any[] = []) => { await db.exec(`set test.uid='${u}'`); try { return (await q(sql, p))[0]; } catch (e: any) { return { error: e.message }; } };
@@ -50,6 +60,19 @@ const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as
   // rent settle: backdate coins_at by one day with 2 tiles
   await db.exec(`update profiles set coins=0, coins_at = coins_at - 86400000, boost_until=0 where id='${u1}'`);
   console.log('1 day rent', (await as(u1, 'select get_state() j')).j.s.coins);
+  // engagement features
+  { const a = await as(u1, "select claim_achievement('size_5') j"); console.log('ach not done', a.error); }
+  { const a = await as(u1, "select claim_achievement('rar_' || (select rar from tiles where owner = $1 limit 1)) j", [u1]);
+    console.log('ach claim', a.j ? a.j.s.achClaimed : a.error); }
+  await db.exec(`update profiles set coins = 0.01 where id='${u1}'`);
+  { const d = await as(u1, 'select decorate_tile($1,$2,$3) j', [sp[0], sp[1], 'bateau']); console.log('decorate', d.j ? d.j.s.tiles[`${sp[0]},${sp[1]}`].deco : d.error); }
+  { const d = await as(u1, 'select decorate_tile($1,$2,$3) j', [sp[0], sp[1], 'tortue']); console.log('turtle locked', d.error); }
+  { const p = await as(u1, "select test_purchase('sans_pubs') j"); console.log('no ads', p.j?.s.noAds); }
+  { const p = await as(u1, "select test_purchase('perles_100') j"); console.log('pack', p.j?.s.pearls); }
+  await db.exec('update app_config set iap_test = false');
+  console.log('purchase off', (await as(u1, "select test_purchase('perles_100') j")).error);
+  { const ev = (await q('select event_at(g_now()) e'))[0].e; const c = await as(u1, 'select catch_creature() j');
+    console.log('catch during', ev, c.j ? [c.j.reward, c.j.s.caught] : c.error, 'again:', (await as(u1, 'select catch_creature() j')).error); }
   // u2 was referred by u1: deleting u1 must keep u2 and remove all of u1's rows
   await as(u1, 'select delete_account()');
   const left = await q(`select (select count(*) from auth.users where id='${u1}') u, (select count(*) from profiles where id='${u1}') p,
