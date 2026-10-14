@@ -324,5 +324,5 @@ export const TUTORIAL: [string, string][] = [
   ['Votre premier îlot est gratuit', 'Touchez l’îlot marqué « ? » puis Acquérir. Sa rareté reste secrète jusqu’à l’achat, et ses voisins apparaissent ensuite.'],
   ['Gagnez des perles', 'Publicités, sondages et mini-jeux rapportent des perles. Chaque nouvel îlot coûte 100 perles.'],
   ['Boostez votre rente', 'Une pub de boost ajoute 1 h de rente multipliée, jusqu’à ×30 quand votre archipel est petit.'],
-  ['Revenez chaque jour', 'Série de connexion, quêtes du jour et biome à l’honneur chaque semaine. Les doublons s’échangent au Comptoir.'],
+  ['Revenez chaque jour', 'Bonus de connexion dès 3 îlots (jusqu’à 200 perles au 90e jour), quêtes du jour et biome à l’honneur chaque semaine. Les doublons s’échangent au Comptoir.'],
 ];

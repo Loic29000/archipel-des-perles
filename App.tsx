@@ -36,7 +36,8 @@ type Overlay =
   | { type: 'ad'; label: string; then: () => void }
   | { type: 'survey' } | { type: 'memo' } | { type: 'fish' }
   | { type: 'reveal'; tile: R.Tile }
-  | { type: 'msg'; title: string; body: string; action?: string; next?: Overlay | null; streak?: boolean }
+  | { type: 'msg'; title: string; body: string; action?: string; next?: Overlay | null }
+  | { type: 'streak'; next?: Overlay | null }
   | { type: 'tutorial'; step: number; next?: Overlay | null }
   | { type: 'settings'; page: SettingsPage }
   | { type: 'recap'; away: number; gain: number; next?: Overlay | null }
@@ -152,9 +153,8 @@ function Game() {
         const away = seen ? backend.now() - seen.t : 0;
         const gain = seen ? R.settle(st, backend.now()).coins - seen.coins : 0;
         const recap: Overlay | null = seen && away > 15 * R.MIN && gain > 0 && R.tileCount(st) > 0 ? { type: 'recap', away, gain } : null;
-        const daily: Overlay | null = login.reward > 0
-          ? { type: 'msg', streak: true, title: `Série de ${plural(login.s.streak.count, 'jour')} !`, body: `Récompense de connexion : +${plural(login.reward, 'perle')}. Revenez demain pour continuer la série.`, action: 'Récupérer', next: recap }
-          : recap;
+        // login calendar: offered on opening, but the bonus only counts once collected
+        const daily: Overlay | null = R.streakInfo(login.s, backend.now()).canClaim ? { type: 'streak', next: recap } : recap;
         setOverlay(saved.tutorialDone ? daily : { type: 'tutorial', step: 0, next: daily });
       } catch (e) {
         setFatal(e instanceof Error ? e.message : String(e));
@@ -221,7 +221,7 @@ function Game() {
     if (s.boostUntil > n) list.push({ id: 'boost', at: toDevice(s.boostUntil), title: 'Boost terminé', body: 'Regardez une pub pour relancer votre boost.' });
     if (s.cd.ad > n) list.push({ id: 'ad', at: toDevice(s.cd.ad), title: 'Une perle vous attend', body: 'Une nouvelle publicité est disponible : +1 perle.' });
     for (const g of ['fish', 'memo'] as const) if (s.cd[g] > n) list.push({ id: g, at: toDevice(s.cd[g]), title: 'Mini-jeu disponible', body: g === 'fish' ? 'La pêche aux bouteilles est de retour.' : 'La mémoire des coquillages est de retour.' });
-    list.push({ id: 'daily', at: toDevice((R.dayOf(n) + 1) * R.DAY + 8 * R.HOUR), title: 'Récompense du jour', body: 'Connectez-vous pour garder votre série et vos quêtes.' });
+    list.push({ id: 'daily', at: toDevice((R.dayOf(n) + 1) * R.DAY + 8 * R.HOUR), title: 'Récompense du jour', body: 'Récupérez votre bonus de connexion pour garder votre série.' });
     scheduleReminders(list);
   }, [s, settings.notifications, demo, backend]);
 
@@ -249,6 +249,7 @@ function Game() {
   const busy = !!overlay;
   const ready = (t: number) => now >= t;
   const minor = settings.ageGroup !== 'adult';
+  const streak = R.streakInfo(s, now);
   const ev = R.eventAt(now);
   const creatureKind = ev ? ev.creature : null;
   const creature = creatureKind && count > 0 && ready(s.cd.event) ? creatureSpot(s, Math.floor(now / R.HOUR), creatureKind) : null;
@@ -552,9 +553,52 @@ function Game() {
     );
   }
 
+  /** Atlas Earth-style login calendar: the current week of the 90-day cycle and the next big bonuses. */
+  function StreakCalendar({ compact }: { compact?: boolean }) {
+    const cur = ((streak.next - 1) % R.STREAK_CYCLE) + 1; // cycle day of the next collection
+    const start = Math.floor((cur - 1) / 7) * 7 + 1;
+    const days = Array.from({ length: Math.min(7, R.STREAK_CYCLE - start + 1) }, (_, i) => start + i);
+    const upcoming = Object.keys(R.STREAK_MILESTONES).map(Number).filter(d => d >= cur).slice(0, 3);
+    return (
+      <View style={{ gap: 8 }}>
+        {!compact && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <FlameIcon size={18} color="#e2694f" />
+            <T c={c} style={{ fontWeight: '700', flex: 1 }}>Bonus de connexion · série de {plural(streak.count, 'jour')}</T>
+          </View>
+        )}
+        <View style={{ flexDirection: 'row', gap: 4 }}>
+          {days.map(d => {
+            const done = d < cur;
+            const today = d === cur && streak.canClaim;
+            const big = !!R.STREAK_MILESTONES[d];
+            return (
+              <View key={d} style={{ flex: 1, alignItems: 'center', paddingVertical: 5, borderRadius: 10, gap: 1,
+                backgroundColor: done ? c.accent : c.panel, borderWidth: 2, borderColor: today ? c.accentDeep : big ? c.epic : 'transparent' }}>
+                <T c={c} style={{ fontSize: 10, fontWeight: '700', color: done ? c.accentInk : c.muted }}>J{d}</T>
+                {big ? <GiftIcon size={16} color={done ? c.accentInk : c.epic} /> : <PearlIcon size={14} />}
+                <T c={c} num style={{ fontSize: 11, color: done ? c.accentInk : c.ink }}>+{R.streakReward(d)}</T>
+              </View>
+            );
+          })}
+        </View>
+        {upcoming.length > 0 && (
+          <T c={c} muted style={{ fontSize: 12 }}>Gros bonus à venir : {upcoming.map(d => `jour ${d} · ${R.STREAK_MILESTONES[d]} perles`).join(', ')}.</T>
+        )}
+        <T c={c} muted style={{ fontSize: 12 }}>
+          {streak.broken ? 'Série interrompue : elle repart au jour 1. ' : ''}Un jour manqué et la série repart au jour 1. Cycle de {R.STREAK_CYCLE} jours.
+        </T>
+        {!compact && (streak.locked
+          ? <T c={c} style={{ fontSize: 13, fontWeight: '700' }}>Débloqué avec {R.STREAK_MIN_TILES} îlots ({count}/{R.STREAK_MIN_TILES})</T>
+          : streak.canClaim
+            ? <Btn c={c} small icon={<PearlIcon size={16} />} label={`Récupérer · jour ${streak.next} · +${plural(streak.reward, 'perle')}`} onPress={() => setOverlay({ type: 'streak' })} />
+            : <T c={c} style={{ fontSize: 13, fontWeight: '700', color: c.good }}>Bonus du jour récupéré ✓ Revenez demain.</T>)}
+      </View>
+    );
+  }
+
   function QuestsTab() {
     const weekLeft = R.WEEK - (now % R.WEEK);
-    const pos = ((s!.streak.count - 1) % 7 + 7) % 7;
     return (
       <View style={{ gap: 10 }}>
         <EventCard />
@@ -567,25 +611,8 @@ function Game() {
             <T c={c} style={{ fontSize: 12, color: '#16313a' }}>Encore {dur(weekLeft)} pour en profiter.</T>
           </View>
         </View>
-        <Card c={c} style={{ gap: 8 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <FlameIcon size={18} color="#e2694f" />
-            <T c={c} style={{ fontWeight: '700' }}>Série de {plural(s!.streak.count, 'jour')}</T>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 4 }}>
-            {R.STREAK_REWARDS.map((r, i) => {
-              const done = i <= pos && s!.streak.count > 0;
-              const today = i === pos && s!.streak.count > 0;
-              return (
-                <View key={i} style={{ flex: 1, alignItems: 'center', paddingVertical: 5, borderRadius: 10, gap: 1,
-                  backgroundColor: done ? c.accent : c.panel, borderWidth: 2, borderColor: today ? c.accentDeep : 'transparent' }}>
-                  <T c={c} style={{ fontSize: 10, fontWeight: '700', color: done ? c.accentInk : c.muted }}>J{i + 1}</T>
-                  {i === 6 ? <GiftIcon size={16} color={done ? c.accentInk : c.muted} /> : <PearlIcon size={14} />}
-                  <T c={c} num style={{ fontSize: 11, color: done ? c.accentInk : c.ink }}>+{r}</T>
-                </View>
-              );
-            })}
-          </View>
+        <Card c={c} style={{ gap: 10 }} highlight={streak.canClaim ? c.accent : undefined}>
+          <StreakCalendar />
         </Card>
         {s!.quests.items.map(q => {
           const def = R.QUESTS[q.id];
@@ -773,8 +800,24 @@ function Game() {
       );
       case 'msg': return (
         <MessageCard c={c} title={overlay.title} body={overlay.body} action={overlay.action}
-          icon={overlay.streak ? <View style={[st.bigDisc, { backgroundColor: '#e2694f' }]}><FlameIcon size={34} color="#fff" /></View> : undefined}
-          onClose={() => { if (overlay.streak) reward(`+${R.STREAK_REWARDS[((s!.streak.count - 1) % 7 + 7) % 7]}`, 'pearl'); setOverlay(overlay.next ?? null); }} />
+          onClose={() => setOverlay(overlay.next ?? null)} />
+      );
+      case 'streak': return (
+        <MessageCard c={c} title="Bonus de connexion" body={streak.canClaim
+            ? `Jour ${streak.next} de votre série. Récupérez votre bonus chaque jour : les gros bonus tombent aux jours 7, 14, 30, 60 et 90.`
+            : streak.locked ? `Le calendrier se débloque avec ${R.STREAK_MIN_TILES} îlots.` : 'Bonus du jour récupéré. Revenez demain pour continuer la série.'}
+          icon={<View style={[st.bigDisc, { backgroundColor: '#e2694f' }]}><FlameIcon size={34} color="#fff" /></View>}
+          action={streak.canClaim ? `Récupérer +${plural(streak.reward, 'perle')}` : 'Fermer'}
+          onCancel={streak.canClaim ? () => setOverlay(overlay.next ?? null) : undefined}
+          onClose={async () => {
+            if (streak.canClaim) {
+              const res = await act(() => backend.claimStreak());
+              if (res) { setS(res.s); reward(`+${res.reward}`, 'pearl'); }
+            }
+            setOverlay(overlay.next ?? null);
+          }}>
+          <StreakCalendar compact />
+        </MessageCard>
       );
       case 'settings': return (
         <SettingsScreen c={c} page={overlay.page} settings={settings} onChange={changeSetting} account={backend.account()} online={backend.mode === 'online'}
@@ -871,10 +914,13 @@ function Game() {
               <T c={c} display style={{ fontWeight: '700', fontSize: 15, flexShrink: 1 }} numberOfLines={1}>Archipel des Perles</T>
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 {demo && <View style={[st.tag, { backgroundColor: c.accent }]}><T c={c} style={{ fontSize: 10, fontWeight: '700', color: c.accentInk }}>DÉMO</T></View>}
-                <View style={[st.tag, { backgroundColor: c.card, flexDirection: 'row', gap: 3, alignItems: 'center' }]}>
-                  <FlameIcon size={13} color="#e2694f" />
-                  <T c={c} style={{ fontSize: 11, fontWeight: '700' }}>{s.streak.count}</T>
-                </View>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Bonus de connexion, série de ${plural(streak.count, 'jour')}`} hitSlop={6}
+                  onPress={() => { play('tap'); setOverlay({ type: 'streak' }); }}
+                  style={[st.tag, { backgroundColor: streak.canClaim ? c.accent : c.card, flexDirection: 'row', gap: 3, alignItems: 'center' }]}>
+                  <FlameIcon size={13} color={streak.canClaim ? c.accentInk : '#e2694f'} />
+                  <T c={c} style={{ fontSize: 11, fontWeight: '700', color: streak.canClaim ? c.accentInk : c.ink }}>{streak.count}</T>
+                  {streak.canClaim && <View style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: 5, backgroundColor: c.bad, borderWidth: 1.5, borderColor: c.panel }} />}
+                </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel="Paramètres" hitSlop={8} onPress={() => { play('tap'); setOverlay({ type: 'settings', page: 'settings' }); }}
                   style={[st.gear, { backgroundColor: c.card }]}>
                   <GearIcon size={17} color={c.ink} />

@@ -10,6 +10,8 @@ export interface Backend {
   now(): number;
   init(): Promise<GameState>;
   dailyLogin(): Promise<{ s: GameState; reward: number }>;
+  /** Collects today's login bonus (Atlas Earth-style calendar). */
+  claimStreak(): Promise<{ s: GameState; reward: number }>;
   claim(q: number, r: number): Promise<{ s: GameState; tile: Tile }>;
   adReward(kind: AdKind): Promise<GameState>;
   startGame(game: Game): Promise<GameState>;

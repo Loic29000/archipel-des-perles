@@ -46,6 +46,7 @@ export function createOnlineBackend(url: string, anonKey: string): Backend {
       return init();
     },
     dailyLogin: async () => { const e = await rpc('daily_login'); return { s: e.s, reward: e.reward ?? 0 }; },
+    claimStreak: async () => { const e = await rpc('claim_streak'); return { s: e.s, reward: e.reward ?? 0 }; },
     claim: async (q, r) => { const e = await rpc('claim_tile', { tq: q, tr: r }); return { s: e.s, tile: e.tile! }; },
     adReward: async kind => (await rpc('ad_reward', { kind })).s,
     startGame: async game => (await rpc('start_game', { game })).s,

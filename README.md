@@ -16,7 +16,7 @@ Application Expo (React Native) pour iOS, Android et le web, avec un serveur Sup
 | Pubs, notifications, sons, vibrations | `src/services/*.native.ts` (mobile) et `src/services/*.ts` (web) |
 | Écran, carte, mini-jeux, tutoriel | `App.tsx`, `src/ui/` |
 
-Fonctionnalités : quêtes du jour, série de connexion sur 7 jours, biome à l'honneur chaque semaine (+25 %), comptoir (doublons → perles, phares +10 % par niveau, drapeaux), classement, voisins visibles sur la carte, parrainage (+10 perles chacun), tutoriel, animation de révélation, sons, vibrations, rappels locaux, mode démo (1 s = 10 min).
+Fonctionnalités : quêtes du jour, bonus de connexion façon Atlas Earth (dès 3 îlots, à récupérer chaque jour, 1 perle par jour et gros bonus aux jours 7, 14, 21, 30, 45, 60, 75 et 90 sur un cycle de 90 jours, remis à zéro si un jour est manqué), biome à l'honneur chaque semaine (+25 %), comptoir (doublons → perles, phares +10 % par niveau, drapeaux), classement, voisins visibles sur la carte, parrainage (+10 perles chacun), tutoriel, animation de révélation, sons, vibrations, rappels locaux, mode démo (1 s = 10 min).
 
 ## Lancer en local
 
@@ -38,7 +38,7 @@ npx expo start --dev-client
 
 1. Créez un projet sur supabase.com.
 2. Dans Authentication > Providers, activez **Anonymous sign-ins** (les joueurs démarrent sans inscription) et **Email** (pour sauvegarder leur partie).
-3. Exécutez les fichiers de `supabase/migrations/` dans l'ordre (`0001_init.sql`, `0002_delete_account.sql`, `0003_engagement.sql`, `0004_privacy.sql`) dans l'éditeur SQL, ou `supabase db push` avec la CLI. Créez le projet dans une région de l'Union européenne (Francfort).
+3. Exécutez les fichiers de `supabase/migrations/` dans l'ordre (`0001_init.sql`, `0002_delete_account.sql`, `0003_engagement.sql`, `0004_privacy.sql`, `0005_login_calendar.sql`) dans l'éditeur SQL, ou `supabase db push` avec la CLI. Créez le projet dans une région de l'Union européenne (Francfort).
 4. Copiez `.env.example` en `.env` et renseignez l'URL et la clé `anon` du projet.
 
 Toutes les écritures passent par des fonctions SQL qui utilisent l'horloge du serveur : un joueur ne peut ni modifier ses perles, ni sauter un délai, ni choisir sa rareté. Le biome de chaque îlot est recalculé côté serveur avec le même bruit que le client (`biome_at`, testé par `npm run test:sql`).

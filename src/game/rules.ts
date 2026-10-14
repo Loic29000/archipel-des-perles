@@ -22,7 +22,13 @@ export const PASSPORT: [number, number][] = [[101, 0.25], [61, 0.2], [31, 0.15],
 export const SUPER_MULT = 50, MAX_BOOST = 6 * HOUR, SRB_CYCLE = 15 * DAY, SRB_LEN = 32 * HOUR;
 export const EVENT_BONUS = 0.25;
 export const COOLDOWN = { ad: 20 * MIN, survey: 2 * HOUR, fish: HOUR, memo: HOUR, event: HOUR };
-export const STREAK_REWARDS = [1, 1, 2, 2, 3, 3, 5];
+// Daily login bonus, as in Atlas Earth: unlocked at 3 islands, collected by hand once a day,
+// 1 pearl a day with bigger milestones over a 90-day cycle. Missing a day starts again at day 1.
+export const STREAK_MIN_TILES = 3;
+export const STREAK_CYCLE = 90;
+export const STREAK_MILESTONES: Record<number, number> = { 7: 5, 14: 10, 21: 10, 30: 25, 45: 25, 60: 50, 75: 50, 90: 200 };
+/** Pearls for the n-th consecutive day (n starts at 1). */
+export const streakReward = (n: number) => STREAK_MILESTONES[((n - 1) % STREAK_CYCLE) + 1] ?? 1;
 // Shop prices in doublons.
 export const PEARL_PRICE = 0.0001;
 export const UPGRADE_PRICE = (level: number) => 0.0005 * (level + 1);
@@ -247,13 +253,30 @@ export function ensureDay(s0: GameState, now: number, seed = 0): GameState {
   return s;
 }
 
+/** Starts the day (quests). The login bonus itself is collected with claimStreak. */
 export function dailyLogin(s0: GameState, now: number, seed = 0): { s: GameState; reward: number } {
-  const s = ensureDay(s0, now, seed);
+  return { s: ensureDay(s0, now, seed), reward: 0 };
+}
+
+/** Where the player stands on the login calendar today. */
+export function streakInfo(s: GameState, now: number) {
   const day = dayOf(now);
-  if (s.streak.lastDay === day) return { s, reward: 0 };
+  const alive = s.streak.lastDay >= day - 1;
+  const count = alive ? s.streak.count : 0; // a missed day breaks the series
+  const claimed = s.streak.lastDay === day;
+  const locked = tileCount(s) < STREAK_MIN_TILES;
+  const next = count + 1; // day number of the next collection (today if not yet collected, else tomorrow)
+  return { count, claimed, locked, canClaim: !claimed && !locked, next, reward: streakReward(next), broken: !alive && s.streak.count > 0 };
+}
+
+export function claimStreak(s0: GameState, now: number): { s: GameState; reward: number } {
+  if (tileCount(s0) < STREAK_MIN_TILES) throw new GameError(`Possédez ${STREAK_MIN_TILES} îlots pour débloquer le bonus de connexion.`);
+  const day = dayOf(now);
+  if (s0.streak.lastDay === day) throw new GameError('Bonus du jour déjà récupéré. Revenez demain !');
+  const s = clone(s0);
   s.streak.count = s.streak.lastDay === day - 1 ? s.streak.count + 1 : 1;
   s.streak.lastDay = day;
-  const reward = STREAK_REWARDS[(s.streak.count - 1) % STREAK_REWARDS.length];
+  const reward = streakReward(s.streak.count);
   s.pearls += reward;
   return { s, reward };
 }

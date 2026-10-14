@@ -50,6 +50,7 @@ export function createLocalBackend(): Backend {
       return load();
     },
     dailyLogin: () => apply(() => R.dailyLogin(s, now())),
+    claimStreak: () => apply(() => R.claimStreak(s, now())),
     claim: (q, r) => apply(() => R.claim(s, q, r, now(), Math.random())),
     adReward: kind => apply(() => R.adReward(s, kind, now())),
     startGame: game => apply(() => R.startGame(s, game, now())),

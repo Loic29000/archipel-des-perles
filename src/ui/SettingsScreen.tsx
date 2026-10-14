@@ -222,8 +222,8 @@ function InfoPanel({ c, online, account, onDoc }: { c: Palette; online: boolean;
           <P c={c}>Des packs de perles sont proposés au comptoir, avec leur prix en euros et le prix pour 100 perles. Un îlot de {R.ISLAND_PRICE} perles vaut ainsi {R.pearlsInEuros(R.ISLAND_PRICE)} si les perles sont achetées, mais toutes les perles s’obtiennent aussi gratuitement en jouant.</P>
           <P c={c}>Les perles sont livrées tout de suite : en confirmant un achat, vous renoncez au délai de rétractation de 14 jours. Les joueurs de moins de 15 ans confirment l’accord d’un parent. Pour l’instant les achats sont en mode test : aucun paiement n’est demandé.</P>
         </Rule>
-        <Rule c={c} title="Quêtes, série et biome de la semaine">
-          <P c={c}>Trois quêtes du jour rapportent des perles. Une connexion par jour fait grandir votre série (jusqu’à 5 perles le 7e jour). Chaque semaine, un biome à l’honneur rapporte +25 %.</P>
+        <Rule c={c} title="Bonus de connexion, quêtes et biome de la semaine">
+          <P c={c}>Trois quêtes du jour rapportent des perles. Dès 3 îlots, le calendrier de connexion donne 1 perle par jour à récupérer, et des gros bonus aux jours 7 (5 perles), 14 et 21 (10), 30 et 45 (25), 60 et 75 (50) et 90 (200), puis le cycle recommence. Un jour sans récupérer le bonus et la série repart au jour 1. Chaque semaine, un biome à l’honneur rapporte +25 %.</P>
         </Rule>
       </Section>
 

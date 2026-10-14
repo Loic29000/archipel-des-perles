@@ -3,14 +3,14 @@
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'fs';
 import { biomeAt } from '../src/game/world';
-import { ACHIEVEMENTS, DAY, eventAt, HOUR, questsFor } from '../src/game/rules';
+import { ACHIEVEMENTS, DAY, eventAt, HOUR, questsFor, streakReward } from '../src/game/rules';
 const db = new PGlite();
 const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as any[];
 (async () => {
   await db.exec(`create role anon; create role authenticated; create schema auth;
     create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true),'')::uuid $$;`);
-  for (const m of ['0001_init.sql', '0002_delete_account.sql', '0003_engagement.sql', '0004_privacy.sql']) await db.exec(readFileSync(new URL(`../supabase/migrations/${m}`, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_delete_account.sql', '0003_engagement.sql', '0004_privacy.sql', '0005_login_calendar.sql']) await db.exec(readFileSync(new URL(`../supabase/migrations/${m}`, import.meta.url), 'utf8'));
   // world parity
   let bad = 0;
   for (let a = -30; a <= 30; a += 3) for (let b = -30; b <= 30; b += 3) {
@@ -33,6 +33,9 @@ const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as
   let achBad = 0;
   for (const a of ACHIEVEMENTS) { const [row] = await q('select ach_reward($1) r', [a.id]); if (row.r !== a.reward) achBad++; }
   console.log('achievement reward mismatches', achBad, 'of', ACHIEVEMENTS.length);
+  let stBad = 0;
+  for (let n = 1; n <= 200; n++) { const [row] = await q('select streak_reward($1) r', [n]); if (row.r !== streakReward(n)) stBad++; }
+  console.log('streak reward mismatches', stBad);
   const u1 = '11111111-1111-1111-1111-111111111111', u2 = '22222222-2222-2222-2222-222222222222';
   await q('insert into auth.users values ($1),($2)', [u1, u2]);
   const as = async (u: string, sql: string, p: any[] = []) => { await db.exec(`set test.uid='${u}'`); try { return (await q(sql, p))[0]; } catch (e: any) { return { error: e.message }; } };
@@ -72,6 +75,15 @@ const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as
   console.log('purchase off', (await as(u1, "select test_purchase('perles_100') j")).error);
   { const ev = (await q('select event_at(g_now()) e'))[0].e; const c = await as(u1, 'select catch_creature() j');
     console.log('catch during', ev, c.j ? [c.j.reward, c.j.s.caught] : c.error, 'again:', (await as(u1, 'select catch_creature() j')).error); }
+  // login calendar
+  console.log('streak locked', (await as(u2, 'select claim_streak() j')).error);
+  await q(`insert into tiles(q, r, owner, rar, biome) values (500, 500, $1, 0, 'plage')`, [u1]);
+  { const a = await as(u1, 'select claim_streak() j'); console.log('streak day', a.j?.s.streak.count, 'reward', a.j?.reward); }
+  console.log('streak twice', (await as(u1, 'select claim_streak() j')).error);
+  await db.exec(`update profiles set streak_day = streak_day - 1, streak_count = 6 where id='${u1}'`);
+  { const a = await as(u1, 'select claim_streak() j'); console.log('streak day', a.j?.s.streak.count, 'reward', a.j?.reward, '(want 7, 5)'); }
+  await db.exec(`update profiles set streak_day = streak_day - 2, streak_count = 29 where id='${u1}'`);
+  { const a = await as(u1, 'select claim_streak() j'); console.log('after missed day', a.j?.s.streak.count, 'reward', a.j?.reward, '(want 1, 1)'); }
   { const x = (await as(u1, 'select export_my_data() j')).j;
     console.log('export', x.account.id === u1, x.tiles.length, 'tiles', x.purchases.length, 'purchases', x.survey_answers.length, 'surveys', x.referred_players, 'referred'); }
   console.log('anon export', (await as('', 'select export_my_data() j')).error ? 'refused' : 'ALLOWED');
