@@ -14,7 +14,7 @@
     "android": {
       "package": "com.example.archipeldesperles",
       "adaptiveIcon": {
-        "backgroundColor": "#0f6b74",
+        "backgroundColor": "#3d98b0",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -34,6 +34,19 @@
           "androidAppId": "ca-app-pub-3940256099942544~3347511713",
           "iosAppId": "ca-app-pub-3940256099942544~1458002511",
           "userTrackingUsageDescription": "Nous utilisons cet identifiant pour afficher des publicités adaptées qui financent le jeu."
+        }
+      ],
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#7fcfd9",
+          "dark": {
+            "backgroundColor": "#0b1a20"
+          }
         }
       ]
     ]

@@ -2,29 +2,37 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle as SvgCircle } from 'react-native-svg';
 import { Backend, createBackend } from './src/backend';
 import type { LeaderRow, WorldTile } from './src/backend/types';
 import * as R from './src/game/rules';
 import { biomeAt, BIOMES, key, parseKey } from './src/game/world';
 import { adsSimulated, showRewardedAd } from './src/services/ads';
 import { buzz, play, setSoundOn } from './src/services/feedback';
+import { useGameFonts } from './src/services/fonts';
 import { enableNotifications, Reminder, scheduleReminders } from './src/services/notify';
 import { loadJSON, saveJSON } from './src/services/storage';
+import { PopItem, Pops } from './src/ui/fx';
 import { HexMap } from './src/ui/HexMap';
-import { Btn, Progress, styles as k, T } from './src/ui/kit';
+import {
+  BoltIcon, BookIcon, BottleIcon, ClipboardIcon, CoinIcon, FlameIcon, GiftIcon, IslandIcon, LighthouseIcon,
+  MoreIcon, PearlIcon, ScrollIcon, ShellIcon, ShopIcon, TrophyIcon, TvIcon, UserIcon,
+} from './src/ui/icons';
+import { Island, IslandBase, tileHash } from './src/ui/island';
+import { Badge, Btn, Card, Progress, styles as k, T } from './src/ui/kit';
 import { AdOverlay, FishingLayer, MemoryPanel, MessageCard, RevealCard, SurveyPanel, TUTORIAL } from './src/ui/Overlays';
 import { FLAG_COLORS, fonts, Palette, RARITY_COLORS, usePalette } from './src/ui/theme';
 
-type Tab = 'tile' | 'earn' | 'boost' | 'quests' | 'shop' | 'ranking' | 'log' | 'profile';
-const TABS: [Tab, string][] = [
-  ['tile', 'Îlot'], ['earn', 'Perles'], ['boost', 'Boost'], ['quests', 'Quêtes'],
-  ['shop', 'Comptoir'], ['ranking', 'Classement'], ['log', 'Carnets'], ['profile', 'Profil'],
+type Tab = 'tile' | 'earn' | 'boost' | 'quests' | 'more';
+type More = 'shop' | 'ranking' | 'log' | 'profile';
+const MORE: [More, string, (p: { size?: number; color?: string }) => React.ReactElement][] = [
+  ['shop', 'Comptoir', ShopIcon], ['ranking', 'Classement', TrophyIcon], ['log', 'Carnets', BookIcon], ['profile', 'Profil', UserIcon],
 ];
 type Overlay =
   | { type: 'ad'; label: string; then: () => void }
   | { type: 'survey' } | { type: 'memo' } | { type: 'fish' }
   | { type: 'reveal'; tile: R.Tile }
-  | { type: 'msg'; title: string; body: string; action?: string; next?: Overlay | null }
+  | { type: 'msg'; title: string; body: string; action?: string; next?: Overlay | null; streak?: boolean }
   | { type: 'tutorial'; step: number; next?: Overlay | null };
 
 const fmtInt = (n: number) => Math.floor(n).toLocaleString('fr-FR');
@@ -38,6 +46,7 @@ const dur = (ms: number) => {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
   return d ? `${d} j ${h} h` : h ? `${h} h ${String(m).padStart(2, '0')}` : `${m} min ${String(x).padStart(2, '0')}`;
 };
+const plural = (n: number, w: string) => `${n} ${w}${n > 1 ? 's' : ''}`;
 
 export default function App() {
   return (
@@ -49,25 +58,38 @@ export default function App() {
 
 function Game() {
   const c = usePalette();
+  const fontsReady = useGameFonts();
   const backend = useMemo<Backend>(() => createBackend(), []);
   const [s, setS] = useState<R.GameState | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [, setTick] = useState(0);
   const [tab, setTab] = useState<Tab>('tile');
+  const [more, setMore] = useState<More>('shop');
   const [selected, setSelected] = useState<[number, number] | null>(null);
   const [others, setOthers] = useState<Map<string, WorldTile>>(new Map());
   const [focus, setFocus] = useState<{ at: [number, number]; nonce: number }>({ at: [0, 0], nonce: 0 });
-  const [zoom, setZoom] = useState(30);
+  const [zoom, setZoom] = useState(34);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [pops, setPops] = useState<PopItem[]>([]);
+  const [hudH, setHudH] = useState(0);
+  const [sheetH, setSheetH] = useState(0);
   const [settings, setSettings] = useState({ sound: true, notifications: false, tutorialDone: false });
   const [demo, setDemo] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const popId = useRef(0);
 
   const say = useCallback((m: string) => {
     setToast(m);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2800);
+  }, []);
+
+  /** Celebrate a gain with a floating badge and a coin sound. */
+  const reward = useCallback((text: string, icon?: PopItem['icon']) => {
+    play('coin');
+    buzz('success');
+    setPops(p => [...p.slice(-2), { id: ++popId.current, text, icon }]);
   }, []);
 
   // Runs a backend action; game rule refusals become a toast instead of a crash.
@@ -97,7 +119,7 @@ function Game() {
         setFocus({ at: home, nonce: 1 });
         if (R.tileCount(st) === 0) setSelected(st.spawn);
         const daily: Overlay | null = login.reward > 0
-          ? { type: 'msg', title: `Série de ${login.s.streak.count} jour${login.s.streak.count > 1 ? 's' : ''}`, body: `Récompense de connexion : +${login.reward} perle${login.reward > 1 ? 's' : ''}. Revenez demain pour continuer la série.` }
+          ? { type: 'msg', streak: true, title: `Série de ${plural(login.s.streak.count, 'jour')} !`, body: `Récompense de connexion : +${plural(login.reward, 'perle')}. Revenez demain pour continuer la série.`, action: 'Récupérer' }
           : null;
         setOverlay(saved.tutorialDone ? daily : { type: 'tutorial', step: 0, next: daily });
       } catch (e) {
@@ -155,7 +177,7 @@ function Game() {
       </SafeAreaView>
     );
   }
-  if (!s) return <View style={[st.root, { backgroundColor: c.paper }]} />;
+  if (!s || !fontsReady) return <View style={[st.root, { backgroundColor: c.seaDeep }]} />;
 
   // ---------------------------------------------------------------- derived values for this frame
   const now = backend.now();
@@ -167,6 +189,8 @@ function Game() {
   const featured = R.featuredBiome(now);
   const selKey = selected ? key(selected[0], selected[1]) : null;
   const busy = !!overlay;
+  const ready = (t: number) => now >= t;
+  const cdLabel = (t: number, label: string) => (ready(t) ? label : dur(t - now));
 
   // ---------------------------------------------------------------- actions
   function watchAd(kind: R.AdKind, label: string, after: () => void) {
@@ -216,84 +240,138 @@ function Game() {
     const res = await act(() => backend.finishGame(game, score));
     if (!res) return;
     setS(res.s);
-    if (res.reward) { play('coin'); buzz('success'); say(`+${res.reward} perle${res.reward > 1 ? 's' : ''}`); }
-    else say(game === 'fish' ? `${score} bouteille${score > 1 ? 's' : ''} : il en faut 5 pour une perle.` : 'Aucune perle cette fois.');
+    if (res.reward) reward(`+${res.reward}`, 'pearl');
+    else say(game === 'fish' ? `${plural(score, 'bouteille')} : il en faut 5 pour une perle.` : 'Aucune perle cette fois.');
   }
 
-  const simple = async (fn: () => Promise<R.GameState>, ok?: string) => {
+  const simple = async (fn: () => Promise<R.GameState>, gain?: [string, PopItem['icon']?]) => {
     const st2 = await act(fn);
-    if (st2) { setS(st2); if (ok) { play('coin'); say(ok); } }
+    if (st2) { setS(st2); if (gain) reward(gain[0], gain[1]); }
   };
 
   // ---------------------------------------------------------------- tab contents
-  const ready = (t: number) => now >= t;
-  const cdLabel = (t: number, label: string) => (ready(t) ? label : dur(t - now));
-
   function TileTab() {
     if (!selected) {
-      return <T c={c} muted>Touchez un îlot marqué « ? » sur la carte. Il doit toucher votre territoire.</T>;
+      return (
+        <Card c={c} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={[st.disc, { backgroundColor: c.own }]}><IslandIcon size={22} color="#ffffff" /></View>
+          <T c={c} muted style={{ flex: 1, lineHeight: 19 }}>Touchez un îlot dans la brume « ? » pour l’explorer. Il doit toucher votre archipel.</T>
+        </Card>
+      );
     }
     const own = s!.tiles[selKey!];
     const other = others.get(selKey!);
-    const biome = BIOMES[own?.biome ?? biomeAt(selected[0], selected[1])];
+    const biomeKey = own?.biome ?? biomeAt(selected[0], selected[1]);
+    const biome = BIOMES[biomeKey];
+    const preview = (kind: 'own' | 'other' | 'free') => (
+      <Svg width={64} height={64}>
+        <IslandBase x={32} y={32} s={26} c={c} kind={kind === 'free' ? 'own' : kind} />
+        <Island x={32} y={32} s={26} c={c} biome={biomeKey} kind={kind === 'free' ? 'own' : kind} seed={tileHash(selected[0], selected[1])}
+          rar={own?.rar} level={own?.level} flag={own ? FLAG_COLORS[s!.flag] : undefined} />
+      </Svg>
+    );
     if (own) {
       const perDay = R.tileRent(own, now) * (1 + R.passportBonus(s!)) * 86400;
+      const col = RARITY_COLORS(c)[own.rar];
       return (
-        <View style={{ gap: 10 }}>
-          <View style={k.row}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <T c={c} style={{ fontWeight: '700', fontSize: 16 }}>{BIOMES[own.biome]} <T c={c} style={{ color: RARITY_COLORS(c)[own.rar], fontSize: 12, fontWeight: '700' }}>{R.RARITIES[own.rar].name.toUpperCase()}</T></T>
-              <T c={c} muted style={{ fontSize: 13 }}>{fmtCoins(perDay)} doublon par jour hors boost · amélioration {own.level}/{R.MAX_LEVEL}{own.biome === featured ? ' · biome à l’honneur +25 %' : ''}</T>
+        <Card c={c} style={{ gap: 10 }}>
+          <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+            {preview('own')}
+            <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <T c={c} style={{ fontWeight: '700', fontSize: 17 }}>{biome}</T>
+                <View style={[st.tag, { backgroundColor: col }]}><T c={c} style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{R.RARITIES[own.rar].name.toUpperCase()}</T></View>
+                {own.biome === featured && <View style={[st.tag, { backgroundColor: c.accent }]}><T c={c} style={{ color: c.accentInk, fontSize: 11, fontWeight: '700' }}>+25 % CETTE SEMAINE</T></View>}
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <CoinIcon size={14} />
+                <T c={c} num style={{ fontSize: 12 }}>{fmtCoins(perDay)}</T>
+                <T c={c} muted style={{ fontSize: 12 }}>par jour</T>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                {Array.from({ length: R.MAX_LEVEL }, (_, i) => (
+                  <View key={i} style={{ opacity: i < own.level ? 1 : 0.25 }}><LighthouseIcon size={16} color={c.bad} /></View>
+                ))}
+                <T c={c} muted style={{ fontSize: 12 }}>phares {own.level}/{R.MAX_LEVEL}</T>
+              </View>
             </View>
           </View>
           {own.level < R.MAX_LEVEL
-            ? <Btn c={c} kind="secondary" label={`Construire un phare (+10 %) · ${fmtCoins(R.UPGRADE_PRICE(own.level))} doublon`} disabled={live.coins < R.UPGRADE_PRICE(own.level)}
-                onPress={() => simple(() => backend.upgrade(selected[0], selected[1]), 'Phare construit')} />
-            : <T c={c} muted>Cet îlot est au niveau maximum.</T>}
-        </View>
+            ? <Btn c={c} kind="teal" icon={<LighthouseIcon size={18} color="#ffffff" />} label={`Construire un phare (+10 %) · ${fmtCoins(R.UPGRADE_PRICE(own.level))}`} disabled={live.coins < R.UPGRADE_PRICE(own.level)}
+                onPress={() => simple(() => backend.upgrade(selected[0], selected[1]), ['Phare construit !'])} />
+            : <T c={c} muted style={{ fontSize: 13 }}>Cet îlot est au niveau maximum.</T>}
+        </Card>
       );
     }
     if (other) {
-      return <T c={c}>{biome} · appartient à <T c={c} style={{ fontWeight: '700' }}>{other.owner}</T>.</T>;
+      return (
+        <Card c={c} style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+          {preview('other')}
+          <T c={c} style={{ flex: 1 }}>{biome} · appartient à <T c={c} style={{ fontWeight: '700' }}>{other.owner}</T>.</T>
+        </Card>
+      );
     }
     const claimable = R.isClaimable(s!, selected[0], selected[1], kk => others.has(kk));
     const price = count === 0 ? 0 : R.ISLAND_PRICE;
+    const short = Math.max(0, price - s!.pearls);
     return (
-      <View style={k.row}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <T c={c} style={{ fontWeight: '700', fontSize: 16 }}>{biome} <T c={c} muted style={{ fontSize: 12, fontWeight: '700' }}>RARETÉ INCONNUE</T></T>
-          <T c={c} muted style={{ fontSize: 13 }}>Tirage à l’achat : 50 % commun, 30 % rare, 15 % épique, 5 % légendaire.</T>
+      <Card c={c} style={{ gap: 10 }} highlight={claimable && !short ? c.accent : undefined}>
+        <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+          <Svg width={64} height={64}>
+            <Island x={32} y={32} s={26} c={c} biome={biomeKey} kind="free" seed={0} />
+          </Svg>
+          <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+            <T c={c} style={{ fontWeight: '700', fontSize: 17 }}>Îlot mystère · {biome}</T>
+            <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+              {R.RARITIES.map((r, i) => (
+                <View key={r.name} style={[st.tag, { backgroundColor: RARITY_COLORS(c)[i] }]}>
+                  <T c={c} style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{r.name} {Math.round(r.odds * 100)} %</T>
+                </View>
+              ))}
+            </View>
+          </View>
         </View>
-        <Btn c={c} label={!claimable ? 'Hors de portée' : price ? `Acquérir · ${price} perles` : 'Acquérir gratuitement'}
-          disabled={!claimable || s!.pearls < price || busy} onPress={claimSelected} />
-      </View>
+        <Btn c={c} icon={price ? <PearlIcon size={18} /> : <GiftIcon size={18} color={c.accentInk} />}
+          label={!claimable ? 'Hors de portée' : !price ? 'Acquérir gratuitement' : short ? `Encore ${short} perles` : `Acquérir · ${price} perles`}
+          disabled={!claimable || short > 0 || busy} onPress={claimSelected} />
+        {claimable && short > 0 && (
+          <Pressable onPress={() => setTab('earn')}><T c={c} style={{ color: c.own, fontWeight: '700', fontSize: 13, textAlign: 'center' }}>Gagner des perles →</T></Pressable>
+        )}
+      </Card>
     );
   }
 
-  function earnRow({ title, sub, label, disabled, onPress }: { title: string; sub: string; label: string; disabled?: boolean; onPress: () => void }) {
+  function EarnRow({ icon, color, title, sub, label, disabled, onPress, isReady }: {
+    icon: React.ReactNode; color: string; title: string; sub: string; label: string; disabled?: boolean; onPress: () => void; isReady?: boolean;
+  }) {
     return (
-      <View key={title} style={[k.row, k.divider, { borderColor: c.line, paddingVertical: 8 }]}>
+      <Card c={c} highlight={isReady ? c.accent : undefined} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 }}>
+        <View style={[st.disc, { backgroundColor: color }]}>{icon}</View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <T c={c} style={{ fontWeight: '700' }}>{title}</T>
           <T c={c} muted style={{ fontSize: 12 }}>{sub}</T>
         </View>
-        <Btn c={c} small label={label} disabled={disabled || busy} onPress={onPress} />
-      </View>
+        <Btn c={c} small kind={isReady ? 'primary' : 'secondary'} label={label} disabled={disabled || busy} onPress={onPress} />
+      </Card>
     );
   }
 
   function EarnTab() {
     return (
-      <View>
-        {earnRow({ title: "Publicité", sub: "+1 perle · toutes les 20 min", label: cdLabel(s!.cd.ad, 'Regarder'), disabled: !ready(s!.cd.ad),
-          onPress: () => watchAd('pearl', 'Publicité · +1 perle', () => { play('coin'); say('+1 perle'); }),  })}
-        {earnRow({ title: "Sondage", sub: "3 questions · +3 perles · toutes les 2 h", label: cdLabel(s!.cd.survey, 'Répondre'), disabled: !ready(s!.cd.survey),
-          onPress: () => setOverlay({ type: 'survey' }),  })}
-        {earnRow({ title: "Pêche aux bouteilles", sub: "Pub puis 12 s · 1 perle par 5 bouteilles, 3 max · toutes les heures", label: cdLabel(s!.cd.fish, 'Jouer'), disabled: !ready(s!.cd.fish),
-          onPress: () => startGame('fish'),  })}
-        {earnRow({ title: "Mémoire des coquillages", sub: "Pub puis 40 s · 1 perle par 2 paires, 3 si tout trouvé · toutes les heures", label: cdLabel(s!.cd.memo, 'Jouer'), disabled: !ready(s!.cd.memo),
-          onPress: () => startGame('memo'),  })}
-        {demo && earnRow({ title: "Démo", sub: "Pour tester sans attendre", label: "+100 perles", onPress: async () => setS(await backend.demo!.gift()) })}
+      <View style={{ gap: 8 }}>
+        <EarnRow icon={<TvIcon size={20} color="#fff" />} color="#e2694f" title="Publicité" sub="+1 perle · toutes les 20 min"
+          label={cdLabel(s!.cd.ad, 'Regarder')} disabled={!ready(s!.cd.ad)} isReady={ready(s!.cd.ad)}
+          onPress={() => watchAd('pearl', 'Publicité · +1 perle', () => reward('+1', 'pearl'))} />
+        <EarnRow icon={<ClipboardIcon size={20} color="#fff" />} color={c.own} title="Sondage" sub="3 questions · +3 perles · toutes les 2 h"
+          label={cdLabel(s!.cd.survey, 'Répondre')} disabled={!ready(s!.cd.survey)} isReady={ready(s!.cd.survey)}
+          onPress={() => setOverlay({ type: 'survey' })} />
+        <EarnRow icon={<BottleIcon size={20} color="#fff" />} color="#3d98b0" title="Pêche aux bouteilles" sub="12 s · 1 perle par 5 bouteilles, 3 max"
+          label={cdLabel(s!.cd.fish, 'Jouer')} disabled={!ready(s!.cd.fish)} isReady={ready(s!.cd.fish)} onPress={() => startGame('fish')} />
+        <EarnRow icon={<ShellIcon size={20} color="#fff" />} color={c.epic} title="Mémoire des coquillages" sub="40 s · 1 perle par 2 paires, 3 si tout trouvé"
+          label={cdLabel(s!.cd.memo, 'Jouer')} disabled={!ready(s!.cd.memo)} isReady={ready(s!.cd.memo)} onPress={() => startGame('memo')} />
+        <T c={c} muted style={{ fontSize: 11, textAlign: 'center' }}>Une courte publicité précède chaque mini-jeu.</T>
+        {demo && <EarnRow icon={<GiftIcon size={20} color="#fff" />} color={c.accentDeep} title="Démo" sub="Pour tester sans attendre" label="+100 perles"
+          onPress={async () => { setS(await backend.demo!.gift()); reward('+100', 'pearl'); }} />}
       </View>
     );
   }
@@ -301,23 +379,48 @@ function Game() {
   function BoostTab() {
     const tier = R.tierMult(count);
     const left = Math.max(0, s!.boostUntil - now);
+    const mult = sup ? R.SUPER_MULT : tier;
     let lo = 1;
     return (
       <View style={{ gap: 10 }}>
-        <T c={c} muted style={{ fontSize: 13, lineHeight: 19 }}>
-          Chaque pub ajoute 1 h de boost, jusqu’à 6 h en réserve ({dur(left)} en ce moment). Avec {count} îlot{count > 1 ? 's' : ''}, le boost multiplie votre rente par {tier}.{' '}
-          {sup ? `Super boost en cours : vos heures de boost comptent ×50 encore ${dur(R.superEndsIn(now))}.` : `Prochain super boost ×50 dans ${dur(R.superStartsIn(now))}.`}
-        </T>
-        <Btn c={c} label="Regarder une pub · +1 h de boost" disabled={busy || count === 0 || left > R.MAX_BOOST - R.HOUR}
-          onPress={() => watchAd('boost', 'Publicité · +1 h de boost', () => { play('coin'); say(`+1 h de boost ×${R.boostMult(s!, backend.now())}`); })} />
+        <Card c={c} highlight={boosting ? c.accent : undefined} style={{ gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={[st.bigDisc, { backgroundColor: boosting ? c.accent : c.line }]}>
+              <T c={c} display style={{ fontSize: 20, fontWeight: '700', color: boosting ? c.accentInk : c.muted }}>×{mult}</T>
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <T c={c} style={{ fontWeight: '700', fontSize: 16 }}>{boosting ? `Boost actif · ${dur(left)}` : 'Boost en pause'}</T>
+              <T c={c} muted style={{ fontSize: 12, lineHeight: 17 }}>Chaque pub ajoute 1 h, jusqu’à 6 h en réserve. Avec {plural(count, 'îlot')}, la rente est multipliée par {tier}.</T>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 4 }}>
+            {Array.from({ length: 6 }, (_, i) => {
+              const f = Math.max(0, Math.min(1, left / R.HOUR - i));
+              return (
+                <View key={i} style={{ flex: 1, height: 12, borderRadius: 4, backgroundColor: c.line, overflow: 'hidden' }}>
+                  <View style={{ width: `${f * 100}%`, height: '100%', backgroundColor: c.accent }} />
+                </View>
+              );
+            })}
+          </View>
+          <Btn c={c} icon={<BoltIcon size={18} color={c.accentInk} />} label="Regarder une pub · +1 h de boost" disabled={busy || count === 0 || left > R.MAX_BOOST - R.HOUR}
+            onPress={() => watchAd('boost', 'Publicité · +1 h de boost', () => reward(`+1 h ×${R.boostMult(s!, backend.now())}`, 'boost'))} />
+        </Card>
+        <Card c={c} highlight={sup ? c.bad : undefined} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+          <View style={[st.disc, { backgroundColor: sup ? c.bad : c.epic }]}><BoltIcon size={20} color="#fff" /></View>
+          <T c={c} style={{ flex: 1, fontSize: 13 }}>
+            {sup ? <><T c={c} style={{ fontWeight: '700', fontSize: 13 }}>Super boost ×50 en cours</T> encore {dur(R.superEndsIn(now))}.</>
+              : <>Prochain <T c={c} style={{ fontWeight: '700', fontSize: 13 }}>super boost ×50</T> dans {dur(R.superStartsIn(now))}.</>}
+          </T>
+        </Card>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
           {R.TIERS.map(([max, m]) => {
             const label = `${max === Infinity ? `${lo}+` : `${lo}–${max}`} · ×${m}`;
             lo = max + 1;
             const cur = m === tier;
             return (
-              <View key={m} style={{ paddingVertical: 4, paddingHorizontal: 6, borderRadius: 6, borderWidth: 1, borderColor: cur ? c.own : c.line, backgroundColor: cur ? c.own : 'transparent' }}>
-                <T c={c} num style={{ fontSize: 11, color: cur ? c.paper : c.muted }}>{label}</T>
+              <View key={m} style={{ paddingVertical: 4, paddingHorizontal: 7, borderRadius: 8, backgroundColor: cur ? c.own : c.card }}>
+                <T c={c} num style={{ fontSize: 11, color: cur ? '#fff' : c.muted }}>{label}</T>
               </View>
             );
           })}
@@ -328,38 +431,54 @@ function Game() {
 
   function QuestsTab() {
     const weekLeft = R.WEEK - (now % R.WEEK);
+    const pos = ((s!.streak.count - 1) % 7 + 7) % 7;
     return (
       <View style={{ gap: 10 }}>
-        <View style={{ padding: 10, borderRadius: 10, backgroundColor: c.biome[featured] }}>
-          <T c={c} style={{ fontWeight: '700', color: '#16313a' }}>Semaine {BIOMES[featured].toLowerCase()} : +25 % de rente</T>
-          <T c={c} style={{ fontSize: 12, color: '#16313a' }}>Vos îlots {BIOMES[featured].toLowerCase()} rapportent plus pendant encore {dur(weekLeft)}.</T>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 16, backgroundColor: c.biome[featured] }}>
+          <Svg width={44} height={44}>
+            <Island x={22} y={22} s={18} c={c} biome={featured} kind="own" seed={3} />
+          </Svg>
+          <View style={{ flex: 1 }}>
+            <T c={c} style={{ fontWeight: '700', color: '#16313a' }}>Semaine {BIOMES[featured].toLowerCase()} · +25 % de rente</T>
+            <T c={c} style={{ fontSize: 12, color: '#16313a' }}>Encore {dur(weekLeft)} pour en profiter.</T>
+          </View>
         </View>
-        <T c={c} style={{ fontWeight: '700' }}>Série de connexion : {s!.streak.count} jour{s!.streak.count > 1 ? 's' : ''}</T>
-        <View style={{ flexDirection: 'row', gap: 4 }}>
-          {R.STREAK_REWARDS.map((r, i) => {
-            const pos = ((s!.streak.count - 1) % 7 + 7) % 7;
-            const done = i <= pos && s!.streak.count > 0;
-            return (
-              <View key={i} style={{ flex: 1, alignItems: 'center', paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: done ? c.own : c.line, backgroundColor: done ? c.own : 'transparent' }}>
-                <T c={c} style={{ fontSize: 10, color: done ? c.paper : c.muted }}>J{i + 1}</T>
-                <T c={c} num style={{ fontSize: 12, color: done ? c.paper : c.ink }}>+{r}</T>
-              </View>
-            );
-          })}
-        </View>
-        <T c={c} style={{ fontWeight: '700' }}>Quêtes du jour</T>
+        <Card c={c} style={{ gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <FlameIcon size={18} color="#e2694f" />
+            <T c={c} style={{ fontWeight: '700' }}>Série de {plural(s!.streak.count, 'jour')}</T>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 4 }}>
+            {R.STREAK_REWARDS.map((r, i) => {
+              const done = i <= pos && s!.streak.count > 0;
+              const today = i === pos && s!.streak.count > 0;
+              return (
+                <View key={i} style={{ flex: 1, alignItems: 'center', paddingVertical: 5, borderRadius: 10, gap: 1,
+                  backgroundColor: done ? c.accent : c.panel, borderWidth: 2, borderColor: today ? c.accentDeep : 'transparent' }}>
+                  <T c={c} style={{ fontSize: 10, fontWeight: '700', color: done ? c.accentInk : c.muted }}>J{i + 1}</T>
+                  {i === 6 ? <GiftIcon size={16} color={done ? c.accentInk : c.muted} /> : <PearlIcon size={14} />}
+                  <T c={c} num style={{ fontSize: 11, color: done ? c.accentInk : c.ink }}>+{r}</T>
+                </View>
+              );
+            })}
+          </View>
+        </Card>
         {s!.quests.items.map(q => {
           const def = R.QUESTS[q.id];
           const complete = q.progress >= def.target;
           return (
-            <View key={q.id} style={[k.row, { gap: 12 }]}>
-              <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                <T c={c}>{def.label} · {q.progress}/{def.target}</T>
-                <Progress c={c} value={q.progress / def.target} />
+            <Card key={q.id} c={c} highlight={complete && !q.claimed ? c.accent : undefined} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, opacity: q.claimed ? 0.6 : 1 }}>
+              <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                <View style={k.row}>
+                  <T c={c} style={{ fontWeight: '600', flex: 1 }}>{def.label}</T>
+                  <T c={c} num style={{ fontSize: 12 }}>{Math.min(q.progress, def.target)}/{def.target}</T>
+                </View>
+                <Progress c={c} value={q.progress / def.target} color={complete ? c.good : c.own} />
               </View>
-              <Btn c={c} small label={q.claimed ? 'Reçu' : `+${def.reward} perles`} disabled={!complete || q.claimed}
-                onPress={() => simple(() => backend.claimQuest(q.id), `Quête terminée : +${def.reward} perles`)} />
-            </View>
+              <Btn c={c} small kind={complete && !q.claimed ? 'primary' : 'secondary'} icon={!q.claimed ? <PearlIcon size={14} /> : undefined}
+                label={q.claimed ? 'Reçu ✓' : `+${def.reward}`} disabled={!complete || q.claimed}
+                onPress={() => simple(() => backend.claimQuest(q.id), [`+${def.reward}`, 'pearl'])} />
+            </Card>
           );
         })}
       </View>
@@ -370,29 +489,34 @@ function Game() {
     const maxPearls = Math.floor(live.coins / R.PEARL_PRICE);
     return (
       <View style={{ gap: 10 }}>
-        <T c={c} muted style={{ fontSize: 13 }}>Échangez vos doublons : 1 perle = {fmtCoins(R.PEARL_PRICE)} doublon. Vous pouvez en obtenir {maxPearls}.</T>
-        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-          {[1, 10, 100].map(n => (
-            <Btn key={n} c={c} small kind="secondary" label={`+${n} perle${n > 1 ? 's' : ''}`} disabled={maxPearls < n}
-              onPress={() => simple(() => backend.buyPearls(n), `+${n} perle${n > 1 ? 's' : ''}`)} />
-          ))}
-          {maxPearls > 0 && <Btn c={c} small label={`Tout échanger (${maxPearls})`} onPress={() => simple(() => backend.buyPearls(maxPearls), `+${maxPearls} perles`)} />}
-        </View>
+        <Card c={c} style={{ gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <CoinIcon size={18} /><T c={c} style={{ fontWeight: '700' }}>→</T><PearlIcon size={18} />
+            <T c={c} muted style={{ fontSize: 13, flex: 1 }}>1 perle = {fmtCoins(R.PEARL_PRICE)} doublon · {maxPearls} possible{maxPearls > 1 ? 's' : ''}</T>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            {[1, 10, 100].map(n => (
+              <Btn key={n} c={c} small kind="secondary" label={`+${n}`} icon={<PearlIcon size={14} />} disabled={maxPearls < n}
+                onPress={() => simple(() => backend.buyPearls(n), [`+${n}`, 'pearl'])} />
+            ))}
+            {maxPearls > 0 && <Btn c={c} small label={`Tout échanger (${maxPearls})`} onPress={() => simple(() => backend.buyPearls(maxPearls), [`+${maxPearls}`, 'pearl'])} />}
+          </View>
+        </Card>
         <T c={c} style={{ fontWeight: '700' }}>Drapeaux</T>
         <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
           {R.FLAGS.map(f => {
             const ownF = s!.flags.includes(f.id), cur = s!.flag === f.id;
             return (
               <Pressable key={f.id} accessibilityRole="button" disabled={busy}
-                onPress={() => simple(() => backend.buyFlag(f.id), ownF ? undefined : `Drapeau ${f.name} acheté`)}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: cur ? 2 : 1, borderColor: cur ? c.ink : c.line }}>
-                <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: FLAG_COLORS[f.id] }} />
-                <T c={c} style={{ fontSize: 13 }}>{f.name}{ownF ? '' : ` · ${fmtCoins(f.price)}`}</T>
+                onPress={() => simple(() => backend.buyFlag(f.id), ownF ? undefined : [`Drapeau ${f.name}`])}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, backgroundColor: c.card, borderWidth: 2, borderColor: cur ? FLAG_COLORS[f.id] : 'transparent' }}>
+                <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: FLAG_COLORS[f.id], borderWidth: 2, borderColor: '#fff' }} />
+                <T c={c} style={{ fontSize: 13, fontWeight: cur ? '700' : '400' }}>{f.name}{ownF ? '' : ` · ${fmtCoins(f.price)}`}</T>
               </Pressable>
             );
           })}
         </View>
-        <T c={c} muted style={{ fontSize: 12 }}>Les phares (+10 % de rente par niveau, 3 niveaux) se construisent depuis l’onglet Îlot.</T>
+        <T c={c} muted style={{ fontSize: 12 }}>Les phares (+10 % de rente par niveau) se construisent en touchant un de vos îlots.</T>
       </View>
     );
   }
@@ -401,7 +525,7 @@ function Game() {
     const acc = backend.account();
     return (
       <View style={{ gap: 10 }}>
-        <NameField c={c} initial={s!.username} onSave={n => simple(() => backend.setUsername(n), 'Nom enregistré')} />
+        <NameField c={c} initial={s!.username} onSave={n => simple(() => backend.setUsername(n), ['Nom enregistré'])} />
         <T c={c} style={{ fontWeight: '700' }}>Compte</T>
         {acc.online
           ? acc.anonymous
@@ -412,7 +536,7 @@ function Game() {
         {acc.online ? (
           <>
             <T c={c} muted style={{ fontSize: 13 }}>Votre code : <T c={c} num selectable style={{ fontWeight: '700' }}>{s!.referralCode}</T>. Vous et votre filleul recevez 10 perles.</T>
-            {!s!.referralUsed && <CodeField c={c} onSave={async code => { const r = await act(() => backend.applyReferral(code)); if (r) { setS(r.s); play('coin'); say(`Code accepté : +${r.reward} perles`); } }} />}
+            {!s!.referralUsed && <CodeField c={c} onSave={async code => { const r = await act(() => backend.applyReferral(code)); if (r) { setS(r.s); reward(`+${r.reward}`, 'pearl'); } }} />}
           </>
         ) : <T c={c} muted style={{ fontSize: 13 }}>Le parrainage demande un compte en ligne.</T>}
         <T c={c} style={{ fontWeight: '700' }}>Réglages</T>
@@ -436,12 +560,14 @@ function Game() {
     const next = [...R.PASSPORT].reverse().find(([min]) => n < min);
     return (
       <View style={{ gap: 8 }}>
-        <T c={c} muted style={{ fontSize: 13 }}>
-          Passeport : {n} carnet{n > 1 ? 's' : ''} · +{Math.round(R.passportBonus(s!) * 100)} % de rente permanente{next ? `. Prochain niveau à ${next[0]} carnets (+${Math.round(next[1] * 100)} %).` : '.'}
-        </T>
+        <Card c={c} style={{ gap: 6 }}>
+          <T c={c} style={{ fontWeight: '700' }}>Passeport · {plural(n, 'carnet')} · +{Math.round(R.passportBonus(s!) * 100)} % de rente</T>
+          {next && <><Progress c={c} value={n / next[0]} color={c.epic} />
+            <T c={c} muted style={{ fontSize: 12 }}>Prochain niveau à {next[0]} carnets (+{Math.round(next[1] * 100)} %).</T></>}
+        </Card>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
           {list.map(b => (
-            <View key={b.name} style={{ width: '48%', padding: 8, borderRadius: 9, borderWidth: 1, borderStyle: b.ok ? 'solid' : 'dashed', borderColor: b.ok ? c.own : c.line }}>
+            <View key={b.name} style={{ width: '48.5%', padding: 9, borderRadius: 12, backgroundColor: b.ok ? c.card : 'transparent', borderWidth: 1.5, borderStyle: b.ok ? 'solid' : 'dashed', borderColor: b.ok ? c.good : c.line }}>
               <T c={c} style={{ fontWeight: '700', fontSize: 13, color: b.ok ? c.ink : c.muted }}>{b.ok ? '✓ ' : ''}{b.name}</T>
               <T c={c} muted style={{ fontSize: 12 }}>{b.desc}</T>
             </View>
@@ -451,11 +577,32 @@ function Game() {
     );
   }
 
-  const tabBody: Record<Tab, () => React.ReactElement> = {
-    tile: TileTab, earn: EarnTab, boost: BoostTab, quests: QuestsTab, shop: ShopTab,
-    ranking: () => <Ranking c={c} backend={backend} />, log: LogTab, profile: ProfileTab,
-  };
-  const questsReady = s.quests.items.some(q => !q.claimed && q.progress >= R.QUESTS[q.id].target);
+  function MoreTab() {
+    const body: Record<More, () => React.ReactElement> = { shop: ShopTab, ranking: () => <Ranking c={c} backend={backend} />, log: LogTab, profile: ProfileTab };
+    return (
+      <View style={{ gap: 10 }}>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          {MORE.map(([id, label, Icon]) => (
+            <Pressable key={id} accessibilityRole="tab" accessibilityState={{ selected: more === id }} onPress={() => { play('tap'); setMore(id); }}
+              style={[st.seg, { backgroundColor: more === id ? c.ink : c.card }]}>
+              <Icon size={16} color={more === id ? c.paper : c.muted} />
+              <T c={c} style={{ fontSize: 11, fontWeight: '700', color: more === id ? c.paper : c.muted }} numberOfLines={1}>{label}</T>
+            </Pressable>
+          ))}
+        </View>
+        {body[more]()}
+      </View>
+    );
+  }
+
+  const tabBody: Record<Tab, () => React.ReactElement> = { tile: TileTab, earn: EarnTab, boost: BoostTab, quests: QuestsTab, more: MoreTab };
+  const questsReady = s.quests.items.filter(q => !q.claimed && q.progress >= R.QUESTS[q.id].target).length;
+  const earnReady = (['ad', 'survey', 'fish', 'memo'] as const).filter(x => ready(s.cd[x])).length;
+  const TABS: [Tab, string, (p: { size?: number; color?: string }) => React.ReactElement, number | true | 0][] = [
+    ['tile', 'Îlot', IslandIcon, 0], ['earn', 'Perles', PearlLine, earnReady], ['boost', 'Boost', BoltIcon, !boosting && count > 0 ? true : 0],
+    ['quests', 'Quêtes', ScrollIcon, questsReady], ['more', 'Plus', MoreIcon, 0],
+  ];
+  const nextIsland = count === 0 ? 1 : Math.min(1, s.pearls / R.ISLAND_PRICE);
 
   // ---------------------------------------------------------------- overlays
   function renderOverlay() {
@@ -465,7 +612,7 @@ function Game() {
       case 'survey': return (
         <SurveyPanel c={c} onCancel={() => setOverlay(null)} onDone={async answers => {
           setOverlay(null);
-          await simple(() => backend.survey(answers), 'Sondage terminé : +3 perles');
+          await simple(() => backend.survey(answers), ['+3', 'pearl']);
         }} />
       );
       case 'memo': return <MemoryPanel c={c} onEnd={p => endGame('memo', p)} />;
@@ -474,12 +621,17 @@ function Game() {
         <RevealCard c={c} tile={overlay.tile} rentPerDay={fmtCoins(R.tileRent(overlay.tile, now) * (1 + R.passportBonus(s!)) * 86400)}
           onClose={() => { setOverlay(null); setSelected(null); }} />
       );
-      case 'msg': return <MessageCard c={c} title={overlay.title} body={overlay.body} action={overlay.action} onClose={() => setOverlay(overlay.next ?? null)} />;
+      case 'msg': return (
+        <MessageCard c={c} title={overlay.title} body={overlay.body} action={overlay.action}
+          icon={overlay.streak ? <View style={[st.bigDisc, { backgroundColor: '#e2694f' }]}><FlameIcon size={34} color="#fff" /></View> : undefined}
+          onClose={() => { if (overlay.streak) reward(`+${R.STREAK_REWARDS[((s!.streak.count - 1) % 7 + 7) % 7]}`, 'pearl'); setOverlay(overlay.next ?? null); }} />
+      );
       case 'tutorial': {
         const [title, body] = TUTORIAL[overlay.step];
         const last = overlay.step === TUTORIAL.length - 1;
         return (
-          <MessageCard c={c} title={`${overlay.step + 1}/${TUTORIAL.length} · ${title}`} body={body} action={last ? 'Jouer' : 'Suivant'}
+          <MessageCard c={c} title={title} body={body} action={last ? 'Jouer' : 'Suivant'}
+            icon={<View style={{ flexDirection: 'row', gap: 5 }}>{TUTORIAL.map((_, i) => <View key={i} style={{ width: i === overlay.step ? 18 : 7, height: 7, borderRadius: 4, backgroundColor: i === overlay.step ? c.accent : c.line }} />)}</View>}
             onClose={() => {
               if (last) { updateSettings({ tutorialDone: true }); setOverlay(overlay.next ?? null); }
               else setOverlay({ ...overlay, step: overlay.step + 1 });
@@ -490,80 +642,120 @@ function Game() {
   }
 
   return (
-    <SafeAreaView style={[st.root, { backgroundColor: c.paper }]} edges={['top', 'bottom', 'left', 'right']}>
-      <StatusBar style="auto" />
-      <View style={st.app}>
-        <View style={st.header}>
-          <View style={[k.row, { flexWrap: 'wrap' }]}>
-            <T c={c} display style={{ fontWeight: '700', fontSize: 15 }}>Archipel des Perles</T>
-            {demo && <View style={{ backgroundColor: c.accent, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 }}><T c={c} style={{ fontSize: 11, fontWeight: '700', color: c.accentInk }}>Démo · 1 s = 10 min</T></View>}
-          </View>
-          <View style={st.stats}>
-            <Stat c={c} value={fmtInt(s.pearls)} label="perles" />
-            <Stat c={c} value={fmtCoins(live.coins)} label="doublons" />
-            <Stat c={c} value={fmtCoins(rate * 86400)} label="par jour" />
-            <Stat c={c} value={String(count)} label="îlots" />
-          </View>
-        </View>
+    <View style={[st.root, { backgroundColor: c.seaDeep }]}>
+      <StatusBar style="light" />
+      <HexMap s={s} others={others} selected={selected} focus={focus} zoom={zoom} c={c} disabled={busy} insetTop={hudH} insetBottom={sheetH}
+        onSelect={(q, r) => {
+          const kk = key(q, r);
+          if (s.tiles[kk] || others.has(kk) || R.isClaimable(s, q, r, x => others.has(x))) { setSelected([q, r]); setTab('tile'); play('tap'); }
+          else setSelected(null);
+        }} />
 
-        <View style={[st.map, { backgroundColor: c.sea, borderColor: c.line }]}>
-          <HexMap s={s} others={others} selected={selected} focus={focus} zoom={zoom} c={c} disabled={busy}
-            onSelect={(q, r) => {
-              const kk = key(q, r);
-              if (s.tiles[kk] || others.has(kk) || R.isClaimable(s, q, r, x => others.has(x))) { setSelected([q, r]); setTab('tile'); play('tap'); }
-              else setSelected(null);
-            }} />
-          <View style={[st.chip, { backgroundColor: boosting ? (sup ? c.bad : c.accent) : c.panel, borderColor: boosting ? 'transparent' : c.line }]}>
-            <T c={c} num style={{ fontSize: 12, fontWeight: '700', color: boosting ? (sup ? c.paper : c.accentInk) : c.ink }}>
-              {boosting ? `${sup ? 'Super ×50' : `Boost ×${R.tierMult(count)}`} · ${dur(s.boostUntil - now)}` : 'Sans boost'}
-            </T>
-          </View>
-          <View style={st.zoom}>
-            {[['+', () => setZoom(z => Math.min(48, z * 1.25))], ['−', () => setZoom(z => Math.max(12, z * 0.8))],
-              ['◎', () => setFocus({ at: selected ?? (Object.keys(s.tiles)[0] ? parseKey(Object.keys(s.tiles)[0]) : s.spawn), nonce: Date.now() })]].map(([l, f]) => (
-              <Pressable key={l as string} accessibilityRole="button" accessibilityLabel={l === '+' ? 'Zoomer' : l === '−' ? 'Dézoomer' : 'Recentrer'}
-                onPress={f as () => void} style={[st.iconBtn, { backgroundColor: c.panel, borderColor: c.line }]}>
-                <T c={c} style={{ fontSize: 18, fontWeight: '600' }}>{l as string}</T>
-              </Pressable>
-            ))}
-          </View>
-          {renderOverlay()}
-          {toast && (
-            <View pointerEvents="none" style={[st.toast, { backgroundColor: c.ink }]}>
-              <T c={c} style={{ color: c.paper, fontSize: 13 }}>{toast}</T>
+      <SafeAreaView style={st.overlayRoot} edges={['top', 'bottom', 'left', 'right']} pointerEvents="box-none">
+        <View style={st.app} pointerEvents="box-none">
+          {/* ---- resources */}
+          <View onLayout={e => setHudH(e.nativeEvent.layout.height + e.nativeEvent.layout.y)} style={[st.hud, { backgroundColor: c.panel, borderColor: c.line }]}>
+            <View style={[k.row, { gap: 6 }]}>
+              <T c={c} display style={{ fontWeight: '700', fontSize: 15, flexShrink: 1 }} numberOfLines={1}>Archipel des Perles</T>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {demo && <View style={[st.tag, { backgroundColor: c.accent }]}><T c={c} style={{ fontSize: 10, fontWeight: '700', color: c.accentInk }}>DÉMO</T></View>}
+                <View style={[st.tag, { backgroundColor: c.card, flexDirection: 'row', gap: 3, alignItems: 'center' }]}>
+                  <FlameIcon size={13} color="#e2694f" />
+                  <T c={c} style={{ fontSize: 11, fontWeight: '700' }}>{s.streak.count}</T>
+                </View>
+              </View>
             </View>
-          )}
-        </View>
-
-        <View style={[st.sheet, { backgroundColor: c.panel, borderColor: c.line }]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-            {TABS.map(([id, label]) => (
-              <Pressable key={id} accessibilityRole="tab" accessibilityState={{ selected: tab === id }} onPress={() => setTab(id)}
-                style={[st.tab, { borderColor: tab === id ? c.ink : c.line, backgroundColor: tab === id ? c.ink : 'transparent' }]}>
-                <T c={c} style={{ fontSize: 13, fontWeight: '600', color: tab === id ? c.paper : c.muted }}>
-                  {label}{id === 'quests' && questsReady ? ' •' : ''}
-                </T>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <Pressable onPress={() => setTab('earn')} style={[st.res, { backgroundColor: c.card }]}>
+                <PearlIcon size={24} />
+                <View>
+                  <T c={c} num style={{ fontSize: 16, fontWeight: '700' }}>{fmtInt(s.pearls)}</T>
+                  <T c={c} muted style={st.resLabel}>perles</T>
+                </View>
               </Pressable>
-            ))}
-          </ScrollView>
-          <ScrollView style={{ maxHeight: 230 }} contentContainerStyle={{ paddingTop: 10 }}>
-            {tabBody[tab]()}
-          </ScrollView>
+              <Pressable onPress={() => { setTab('more'); setMore('shop'); }} style={[st.res, { backgroundColor: c.card, flex: 1.6 }]}>
+                <CoinIcon size={24} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <T c={c} num style={{ fontSize: 14, fontWeight: '700' }} numberOfLines={1}>{fmtCoins(live.coins)}</T>
+                  <T c={c} muted style={st.resLabel} numberOfLines={1}>+{fmtCoins(rate * 86400)} / jour</T>
+                </View>
+              </Pressable>
+            </View>
+            <View style={{ gap: 4 }}>
+              <View style={k.row}>
+                <T c={c} style={{ fontSize: 11, fontWeight: '700' }}>{count === 0 ? 'Premier îlot offert' : `${plural(count, 'îlot')} · prochain îlot`}</T>
+                <T c={c} num style={{ fontSize: 11 }}>{count === 0 ? 'gratuit' : `${Math.min(s.pearls, R.ISLAND_PRICE)}/${R.ISLAND_PRICE}`}</T>
+              </View>
+              <Progress c={c} value={nextIsland} color={nextIsland >= 1 ? c.good : c.accent} height={7} />
+            </View>
+          </View>
+
+          {/* ---- map controls */}
+          <View style={st.mapRow} pointerEvents="box-none">
+            <Pressable onPress={() => setTab('boost')}
+              style={[st.chip, { backgroundColor: boosting ? (sup ? c.bad : c.accent) : c.panel, borderColor: boosting ? 'transparent' : c.line }]}>
+              <BoltIcon size={15} color={boosting ? (sup ? '#fff' : c.accentInk) : c.muted} />
+              <T c={c} num style={{ fontSize: 12, fontWeight: '700', color: boosting ? (sup ? '#fff' : c.accentInk) : c.ink }}>
+                {boosting ? `×${sup ? R.SUPER_MULT : R.tierMult(count)} · ${dur(s.boostUntil - now)}` : 'Boost en pause'}
+              </T>
+            </Pressable>
+            <View style={{ gap: 6 }}>
+              {[['+', () => setZoom(z => Math.min(56, z * 1.25))], ['−', () => setZoom(z => Math.max(14, z * 0.8))],
+                ['◎', () => setFocus({ at: selected ?? (Object.keys(s.tiles)[0] ? parseKey(Object.keys(s.tiles)[0]) : s.spawn), nonce: Date.now() })]].map(([l, f]) => (
+                <Pressable key={l as string} accessibilityRole="button" accessibilityLabel={l === '+' ? 'Zoomer' : l === '−' ? 'Dézoomer' : 'Recentrer'}
+                  onPress={f as () => void} style={[st.iconBtn, { backgroundColor: c.panel, borderColor: c.line }]}>
+                  <T c={c} style={{ fontSize: 18, fontWeight: '700' }}>{l as string}</T>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+          <View style={{ flex: 1 }} pointerEvents="none" />
+
+          {/* ---- bottom sheet */}
+          <View onLayout={e => setSheetH(e.nativeEvent.layout.height + 10)} style={[st.sheet, { backgroundColor: c.panel, borderColor: c.line }]}>
+            {toast && (
+              <View pointerEvents="none" style={[st.toast, { backgroundColor: c.ink }]}>
+                <T c={c} style={{ color: c.paper, fontSize: 13, textAlign: 'center' }}>{toast}</T>
+              </View>
+            )}
+            <ScrollView style={{ maxHeight: 268 }} contentContainerStyle={{ padding: 12, paddingBottom: 6 }}>
+              {tabBody[tab]()}
+            </ScrollView>
+            <View style={[st.tabBar, { borderColor: c.line }]}>
+              {TABS.map(([id, label, Icon, badge]) => {
+                const on = tab === id;
+                return (
+                  <Pressable key={id} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected: on }} onPress={() => { play('tap'); setTab(id); }} style={st.tabBtn}>
+                    <View style={[st.tabIcon, on && { backgroundColor: c.accent }]}>
+                      <Icon size={21} color={on ? c.accentInk : c.muted} />
+                      {!!badge && <Badge c={c} n={badge} />}
+                    </View>
+                    <T c={c} style={{ fontSize: 11, fontWeight: on ? '700' : '600', color: on ? c.ink : c.muted }}>{label}</T>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
         </View>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+
+      {overlay && <View style={StyleSheet.absoluteFill}>{renderOverlay()}</View>}
+      <SafeAreaView style={st.overlayRoot} edges={['top']} pointerEvents="none">
+        <View style={{ position: 'absolute', left: 0, right: 0, top: hudH + 8 }}>
+          <Pops c={c} items={pops} onDone={id => setPops(p => p.filter(x => x.id !== id))} />
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
 // ---------------------------------------------------------------- small components
-function Stat({ c, value, label }: { c: Palette; value: string; label: string }) {
-  return (
-    <View>
-      <T c={c} num style={{ fontSize: 15 }}>{value}</T>
-      <T c={c} muted style={{ fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase' }}>{label}</T>
-    </View>
-  );
-}
+const PearlLine = ({ size = 22, color = '#000' }: { size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24">
+    <SvgCircle cx={12} cy={12} r={8.5} stroke={color} strokeWidth={2} fill="none" />
+    <SvgCircle cx={9} cy={9} r={2.2} fill={color} />
+  </Svg>
+);
 
 function SwitchRow({ c, label, value, onChange }: { c: Palette; label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -602,7 +794,7 @@ function Ranking({ c, backend }: { c: Palette; backend: Backend }) {
     <View style={{ gap: 2 }}>
       {backend.mode === 'local' && <T c={c} muted style={{ fontSize: 13, marginBottom: 6 }}>Le classement entre joueurs apparaît quand le serveur du jeu est configuré.</T>}
       {rows.map((r, i) => (
-        <View key={i} style={[k.row, { paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8, backgroundColor: r.me ? c.sea : 'transparent' }]}>
+        <View key={i} style={[k.row, { paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8, backgroundColor: r.me ? c.card : 'transparent' }]}>
           <T c={c} num style={{ width: 28 }}>{i + 1}</T>
           <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: FLAG_COLORS[r.flag] ?? c.muted }} />
           <T c={c} style={{ flex: 1, fontWeight: r.me ? '700' : '400' }} numberOfLines={1}>{r.username}{r.me ? ' (vous)' : ''}</T>
@@ -615,14 +807,25 @@ function Ranking({ c, backend }: { c: Palette; backend: Backend }) {
 
 const st = StyleSheet.create({
   root: { flex: 1 },
-  app: { flex: 1, width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 10 },
-  header: { gap: 6 },
-  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  map: { flex: 1, minHeight: 220, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
-  chip: { position: 'absolute', left: 10, top: 10, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1 },
-  zoom: { position: 'absolute', right: 10, top: 10, gap: 6 },
-  iconBtn: { width: 38, height: 38, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  toast: { position: 'absolute', bottom: 12, alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999 },
-  sheet: { borderRadius: 14, borderWidth: 1, padding: 12 },
-  tab: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 9, borderWidth: 1 },
+  overlayRoot: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
+  app: { flex: 1, width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 8, gap: 8 },
+  hud: { borderRadius: 20, borderWidth: 1, padding: 10, gap: 8,
+    shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 5 },
+  res: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, paddingHorizontal: 10, borderRadius: 14 },
+  resLabel: { fontSize: 10, letterSpacing: 0.4 },
+  tag: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  mapRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, borderWidth: 1,
+    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
+  iconBtn: { width: 40, height: 40, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
+  toast: { position: 'absolute', top: -46, alignSelf: 'center', paddingVertical: 9, paddingHorizontal: 16, borderRadius: 999, maxWidth: '92%', zIndex: 2 },
+  sheet: { borderRadius: 24, borderWidth: 1,
+    shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 16, shadowOffset: { width: 0, height: -2 }, elevation: 8 },
+  tabBar: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 6, paddingBottom: 6, paddingHorizontal: 4 },
+  tabBtn: { flex: 1, alignItems: 'center', gap: 2 },
+  tabIcon: { width: 46, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  seg: { flex: 1, alignItems: 'center', gap: 3, paddingVertical: 7, borderRadius: 12 },
+  disc: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  bigDisc: { width: 62, height: 62, borderRadius: 31, alignItems: 'center', justifyContent: 'center' },
 });
