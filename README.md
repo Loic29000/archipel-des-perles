@@ -38,7 +38,7 @@ npx expo start --dev-client
 
 1. Créez un projet sur supabase.com.
 2. Dans Authentication > Providers, activez **Anonymous sign-ins** (les joueurs démarrent sans inscription) et **Email** (pour sauvegarder leur partie).
-3. Exécutez les fichiers de `supabase/migrations/` dans l'ordre (`0001_init.sql`, `0002_delete_account.sql`, `0003_engagement.sql`, `0004_privacy.sql`, `0005_login_calendar.sql`) dans l'éditeur SQL, ou `supabase db push` avec la CLI. Créez le projet dans une région de l'Union européenne (Francfort).
+3. Exécutez les fichiers de `supabase/migrations/` dans l'ordre (`0001_init.sql`, `0002_delete_account.sql`, `0003_engagement.sql`, `0004_privacy.sql`, `0005_login_calendar.sql`, `0006_pass.sql`) dans l'éditeur SQL, ou `supabase db push` avec la CLI. Créez le projet dans une région de l'Union européenne (Francfort).
 4. Copiez `.env.example` en `.env` et renseignez l'URL et la clé `anon` du projet.
 
 Toutes les écritures passent par des fonctions SQL qui utilisent l'horloge du serveur : un joueur ne peut ni modifier ses perles, ni sauter un délai, ni choisir sa rareté. Le biome de chaque îlot est recalculé côté serveur avec le même bruit que le client (`biome_at`, testé par `npm run test:sql`).
@@ -76,6 +76,7 @@ Tous les chiffres sont en tête de `src/game/rules.ts` et dupliqués dans la mig
 - **Décorations** (`DECOS`) : achetées en doublons, visibles sur la carte. La tortue se débloque en attrapant une créature.
 - **Récap au retour** : à l'ouverture, le jeu affiche ce que les îlots ont rapporté pendant l'absence.
 - **Achats intégrés** (`PRODUCTS`) : packs de perles, **en mode test** (aucun paiement).
+- **Pass Capitaine** (`PASS`), abonnement mensuel inspiré de l'Atlas Explorer Club : réserve de boost de 8 h, +2 perles sur le bonus de connexion, mini-jeux toutes les 40 min, badge boussole. En mode test, chaque achat ajoute 30 jours.
   Côté serveur, `test_purchase` ne marche que si `app_config.iap_test` vaut `true`.
   Pour passer en réel : créer les produits sur App Store Connect et Google Play Console, ajouter une bibliothèque d'achats (par exemple `expo-iap`), vérifier chaque reçu dans une fonction serveur qui appelle `g_grant_purchase`, puis passer `iap_test` à `false`.
 

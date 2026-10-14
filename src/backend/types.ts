@@ -1,7 +1,7 @@
 import type { AdKind, DecoId, FlagId, Game, GameState, ProductId, QuestId, Tile } from '../game/rules';
 
 export interface WorldTile { q: number; r: number; owner: string; flag: FlagId }
-export interface LeaderRow { username: string; tiles: number; coins: number; flag: FlagId; me: boolean }
+export interface LeaderRow { username: string; tiles: number; coins: number; flag: FlagId; me: boolean; pass?: boolean }
 export interface Account { online: boolean; email: string | null; anonymous: boolean; userId?: string }
 
 export interface Backend {

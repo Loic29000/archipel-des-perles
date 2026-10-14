@@ -177,3 +177,13 @@ export function LighthouseIcon({ size = 22, color = '#000' }: P) {
     </Svg>
   );
 }
+/** Pass Capitaine badge: a compass rose. */
+export function CompassIcon({ size = 18, color = '#000' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Circle cx="12" cy="12" r="9.5" {...stroke(color)} />
+      <Path d="M15.8 8.2l-2.3 5.3-5.3 2.3 2.3-5.3z" fill={color} stroke={color} strokeWidth={1.4} strokeLinejoin="round" />
+      <Circle cx="12" cy="12" r="1.1" fill="#fff" />
+    </Svg>
+  );
+}

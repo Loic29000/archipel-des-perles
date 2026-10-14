@@ -78,7 +78,23 @@ export const PRODUCTS = [
   { id: 'perles_550', name: '550 perles', pearls: 550, price: '4,99 €', cents: 499 },
   { id: 'perles_1200', name: '1 200 perles', pearls: 1200, price: '9,99 €', cents: 999 },
 ] as const;
-export type ProductId = (typeof PRODUCTS)[number]['id'];
+export type PackId = (typeof PRODUCTS)[number]['id'];
+export type ProductId = PackId | typeof PASS.id;
+
+// Monthly pass, modelled on Atlas Earth's Explorer Club: longer boost reserve, bigger daily login bonus,
+// more mini-game plays (Atlas: more daily spins) and a badge next to the name.
+export const PASS = {
+  id: 'pass_capitaine', name: 'Pass Capitaine', price: '4,99 €', cents: 499, days: 30,
+  maxBoost: 8 * HOUR, loginBonus: 2, gameCooldown: 40 * MIN,
+} as const;
+export const PASS_PERKS = [
+  'Réserve de boost de 8 h au lieu de 6 h',
+  `+${PASS.loginBonus} perles sur chaque bonus de connexion`,
+  'Mini-jeux toutes les 40 min au lieu de 1 h',
+  'Badge boussole à côté de votre nom',
+];
+export const hasPass = (s: GameState, now: number) => now < s.passUntil;
+export const maxBoost = (s: GameState, now: number) => (hasPass(s, now) ? PASS.maxBoost : MAX_BOOST);
 
 const euro = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 /** EU consumer rules on virtual currencies: show what an amount of pearls costs in real money, from the cheapest to the dearest pack. */
@@ -122,6 +138,8 @@ export interface GameState {
   referralUsed: boolean;
   achClaimed: string[];
   caught: number;
+  /** End of the Pass Capitaine (0: never had it). */
+  passUntil: number;
 }
 
 export class GameError extends Error {}
@@ -132,7 +150,7 @@ export function newState(now: number): GameState {
     cd: { ad: 0, survey: 0, fish: 0, memo: 0, event: 0 }, pendingGame: null,
     streak: { count: 0, lastDay: -1 }, quests: { day: -1, items: [] },
     flags: ['lagon'], flag: 'lagon', username: 'Navigateur', referralCode: '', referralUsed: false,
-    achClaimed: [], caught: 0,
+    achClaimed: [], caught: 0, passUntil: 0,
   };
 }
 
@@ -266,7 +284,7 @@ export function streakInfo(s: GameState, now: number) {
   const claimed = s.streak.lastDay === day;
   const locked = tileCount(s) < STREAK_MIN_TILES;
   const next = count + 1; // day number of the next collection (today if not yet collected, else tomorrow)
-  return { count, claimed, locked, canClaim: !claimed && !locked, next, reward: streakReward(next), broken: !alive && s.streak.count > 0 };
+  return { count, claimed, locked, canClaim: !claimed && !locked, next, reward: streakReward(next) + (hasPass(s, now) ? PASS.loginBonus : 0), broken: !alive && s.streak.count > 0 };
 }
 
 export function claimStreak(s0: GameState, now: number): { s: GameState; reward: number } {
@@ -276,7 +294,7 @@ export function claimStreak(s0: GameState, now: number): { s: GameState; reward:
   const s = clone(s0);
   s.streak.count = s.streak.lastDay === day - 1 ? s.streak.count + 1 : 1;
   s.streak.lastDay = day;
-  const reward = streakReward(s.streak.count);
+  const reward = streakReward(s.streak.count) + (hasPass(s, now) ? PASS.loginBonus : 0);
   s.pearls += reward;
   return { s, reward };
 }
@@ -316,8 +334,9 @@ export function adReward(s0: GameState, kind: AdKind, now: number): GameState {
     s.cd.ad = now + COOLDOWN.ad;
   } else if (kind === 'boost') {
     if (tileCount(s) === 0) throw new GameError('Acquérez d’abord un îlot.');
-    if (s.boostUntil - now > MAX_BOOST - HOUR) throw new GameError('Votre réserve de boost est pleine.');
-    s.boostUntil = Math.min(now + MAX_BOOST, Math.max(now, s.boostUntil) + boostPerAd(now));
+    const cap = maxBoost(s, now);
+    if (s.boostUntil - now > cap - HOUR) throw new GameError('Votre réserve de boost est pleine.');
+    s.boostUntil = Math.min(now + cap, Math.max(now, s.boostUntil) + boostPerAd(now));
     bumpQuest(s, 'boost');
   }
   bumpQuest(s, 'ad');
@@ -327,7 +346,7 @@ export function adReward(s0: GameState, kind: AdKind, now: number): GameState {
 export function startGame(s0: GameState, game: Game, now: number): GameState {
   const s = ensureDay(s0, now);
   if (now < s.cd[game]) throw new GameError('Ce mini-jeu n’est pas encore disponible.');
-  s.cd[game] = now + COOLDOWN[game];
+  s.cd[game] = now + (hasPass(s, now) ? PASS.gameCooldown : COOLDOWN[game]);
   s.pendingGame = { game, at: now };
   return s;
 }
@@ -437,10 +456,14 @@ export function claimAchievement(s0: GameState, id: string): GameState {
 }
 
 /** Applies a purchase that the store (or test mode) has confirmed. */
-export function grantPurchase(s0: GameState, id: ProductId): GameState {
+export function grantPurchase(s0: GameState, id: ProductId, now: number): GameState {
+  const s = clone(s0);
+  if (id === PASS.id) {
+    s.passUntil = Math.max(now, s.passUntil) + PASS.days * DAY;
+    return s;
+  }
   const p = PRODUCTS.find(x => x.id === id);
   if (!p) throw new GameError('Produit inconnu.');
-  const s = clone(s0);
   s.pearls += p.pearls;
   return s;
 }

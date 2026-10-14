@@ -10,7 +10,7 @@ const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as
   await db.exec(`create role anon; create role authenticated; create schema auth;
     create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true),'')::uuid $$;`);
-  for (const m of ['0001_init.sql', '0002_delete_account.sql', '0003_engagement.sql', '0004_privacy.sql', '0005_login_calendar.sql']) await db.exec(readFileSync(new URL(`../supabase/migrations/${m}`, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_delete_account.sql', '0003_engagement.sql', '0004_privacy.sql', '0005_login_calendar.sql', '0006_pass.sql']) await db.exec(readFileSync(new URL(`../supabase/migrations/${m}`, import.meta.url), 'utf8'));
   // world parity
   let bad = 0;
   for (let a = -30; a <= 30; a += 3) for (let b = -30; b <= 30; b += 3) {
@@ -84,6 +84,20 @@ const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as
   { const a = await as(u1, 'select claim_streak() j'); console.log('streak day', a.j?.s.streak.count, 'reward', a.j?.reward, '(want 7, 5)'); }
   await db.exec(`update profiles set streak_day = streak_day - 2, streak_count = 29 where id='${u1}'`);
   { const a = await as(u1, 'select claim_streak() j'); console.log('after missed day', a.j?.s.streak.count, 'reward', a.j?.reward, '(want 1, 1)'); }
+  // Pass Capitaine
+  await db.exec('update app_config set iap_test = true');
+  { const now = (await q('select g_now() t'))[0].t;
+    const a = await as(u1, "select test_purchase('pass_capitaine') j");
+    console.log('pass days', Math.round((a.j.s.passUntil - now) / 86400000));
+    await db.exec(`update profiles set boost_until = g_now() + 6.5 * 3600000, cd_fish = 0, streak_day = streak_day - 1 where id='${u1}'`);
+    const b = await as(u1, "select ad_reward('boost') j");
+    console.log('pass boost over 6 h', b.j ? Math.round((b.j.s.boostUntil - now) / 60000) + ' min' : b.error);
+    const g = await as(u1, "select start_game('fish') j");
+    console.log('pass fish cooldown', Math.round((g.j.s.cd.fish - now) / 60000), 'min');
+    const k = await as(u1, 'select claim_streak() j'); console.log('pass login', k.j?.s.streak.count, 'reward', k.j?.reward, '(want 2, 3)');
+    console.log('pass in ranking', (await as(u1, 'select * from leaderboard() where me')).pass);
+    await db.exec(`update profiles set boost_until = g_now() + 6.5 * 3600000, pass_until = 0 where id='${u1}'`);
+    console.log('no pass boost over 6 h', (await as(u1, "select ad_reward('boost') j")).error); }
   { const x = (await as(u1, 'select export_my_data() j')).j;
     console.log('export', x.account.id === u1, x.tiles.length, 'tiles', x.purchases.length, 'purchases', x.survey_answers.length, 'surveys', x.referred_players, 'referred'); }
   console.log('anon export', (await as('', 'select export_my_data() j')).error ? 'refused' : 'ALLOWED');

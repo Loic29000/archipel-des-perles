@@ -11,6 +11,7 @@ Ce qui est en place dans le jeu, et ce qui reste à faire avant la publication.
 | Consentement publicitaire IAB TCF v2.2 (Google UMP) avant la première pub, modifiable ensuite | `src/services/ads.native.ts`, Paramètres > Vie privée |
 | Moins de 15 ans : pas de formulaire de consentement, pubs non personnalisées, classées G, traitement « enfant » | `src/services/ads.native.ts` |
 | Achats : prix TTC en euros, prix pour 100 perles, renonciation expresse au droit de rétractation (art. L221-28 13° C. conso.), accord parental pour les moins de 15 ans | Comptoir et confirmation d'achat |
+| Abonnement Pass Capitaine : prix, durée, renouvellement automatique et résiliation affichés avant l'achat, lien « Gérer ou résilier », rétractation avec paiement de la part utilisée (art. L221-25), accord parental pour les moins de 15 ans, section 6 des CGU | Fenêtre du pass au Comptoir |
 | Valeur en euros des perles demandées pour un îlot (principes CPC sur les monnaies virtuelles, 2024) | Fiche d'îlot |
 | Probabilités de rareté affichées avant chaque achat d'îlot | Fiche d'îlot, Infos > Règles |
 | Droit d'accès et de portabilité : export JSON | Paramètres > Vie privée > Télécharger mes données ; RPC `export_my_data` |
@@ -28,7 +29,7 @@ Ce qui est en place dans le jeu, et ce qui reste à faire avant la publication.
 5. **Supabase** : créer le projet dans une région de l'Union européenne (Francfort), signer le DPA de Supabase, planifier `select purge_inactive()` chaque jour (pg_cron).
 6. **AdMob** : créer le message RGPD (Confidentialité et messages > RGPD, avec les partenaires publicitaires) et le message IDFA pour iOS ; activer la vérification côté serveur.
 7. **Stores** : remplir les déclarations de `store/declarations.md`, déclarer les 3 produits de perles, renseigner les URL.
-8. **Avant de passer aux vrais paiements** : vérifier les reçus côté serveur (fonction à écrire) et mettre `app_config.iap_test = false`.
+8. **Avant de passer aux vrais paiements** : vérifier les reçus côté serveur (fonction à écrire, y compris les renouvellements et résiliations du Pass Capitaine via les notifications serveur d'Apple et de Google) et mettre `app_config.iap_test = false`.
 
 ## Points de vigilance
 

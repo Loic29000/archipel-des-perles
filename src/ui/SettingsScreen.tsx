@@ -145,7 +145,7 @@ function SettingsPanel({ c, settings, onChange, account, online, username, demo,
           <View style={{ gap: 8, padding: 10, borderRadius: 12, borderWidth: 1.5, borderColor: c.bad }}>
             <T c={c} style={{ fontSize: 13 }}>
               {online
-                ? 'Votre compte, vos îlots, vos perles et vos doublons seront supprimés définitivement du serveur. Une nouvelle partie démarrera.'
+                ? 'Votre compte, vos îlots, vos perles et vos doublons seront supprimés définitivement du serveur. Une nouvelle partie démarrera. Un Pass Capitaine en cours se résilie à part, dans les abonnements de votre store.'
                 : `Vos îlots, perles et doublons${demo.on ? ' de la partie démo' : ''} seront effacés de cet appareil. Une nouvelle partie démarrera.`}
             </T>
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
@@ -201,7 +201,7 @@ function InfoPanel({ c, online, account, onDoc }: { c: Palette; online: boolean;
           <P c={c}>Une publicité toutes les 20 minutes rapporte 1 perle. Un sondage de 3 questions rapporte 3 perles toutes les 2 heures. La pêche aux bouteilles et la mémoire des coquillages rapportent jusqu’à 3 perles chacune, une fois par heure, après une courte publicité.</P>
         </Rule>
         <Rule c={c} title="Boost">
-          <P c={c}>Chaque publicité de boost ajoute 1 heure, jusqu’à 6 heures en réserve. Pendant le boost, votre rente est multipliée selon la taille de votre archipel :</P>
+          <P c={c}>Chaque publicité de boost ajoute 1 heure, jusqu’à 6 heures en réserve (8 heures avec le Pass Capitaine). Pendant le boost, votre rente est multipliée selon la taille de votre archipel :</P>
           <P c={c}>{tiers.join(' · ')}</P>
           <P c={c}>Tous les 15 jours, un super boost de 32 heures fait compter vos heures de boost ×{R.SUPER_MULT}.</P>
         </Rule>
@@ -219,6 +219,7 @@ function InfoPanel({ c, online, account, onDoc }: { c: Palette; online: boolean;
           <P c={c}>Chaque succès débloqué (biomes, taille de l’archipel, raretés, série, phares, décorations, créatures) rapporte des perles une fois. Les décorations (cabane, voilier, mouettes, coffre, tortue) s’achètent en doublons et s’affichent sur la carte.</P>
         </Rule>
         <Rule c={c} title="Achats">
+          <P c={c}>Le {R.PASS.name} ({R.PASS.price} par mois, sans engagement) donne : {R.PASS_PERKS.join(', ').toLowerCase()}. Il se résilie à tout moment dans les abonnements de l’App Store ou de Google Play.</P>
           <P c={c}>Des packs de perles sont proposés au comptoir, avec leur prix en euros et le prix pour 100 perles. Un îlot de {R.ISLAND_PRICE} perles vaut ainsi {R.pearlsInEuros(R.ISLAND_PRICE)} si les perles sont achetées, mais toutes les perles s’obtiennent aussi gratuitement en jouant.</P>
           <P c={c}>Les perles sont livrées tout de suite : en confirmant un achat, vous renoncez au délai de rétractation de 14 jours. Les joueurs de moins de 15 ans confirment l’accord d’un parent. Pour l’instant les achats sont en mode test : aucun paiement n’est demandé.</P>
         </Rule>

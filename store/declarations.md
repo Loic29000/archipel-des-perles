@@ -32,6 +32,8 @@ Aucune donnée n'est vendue. La partie « partagée » vient uniquement du SDK G
 
 **Autres rubriques de la Play Console**
 
+- Produits : 3 produits intégrés `perles_100`, `perles_550`, `perles_1200` et 1 abonnement `pass_capitaine` (forfait de base mensuel, renouvellement automatique, 4,99 €).
+
 - Annonces : **Oui, l'application contient des annonces.**
 - Public cible : recommandé **13 ans et plus** (13-15, 16-17, 18+). Le jeu applique quand même un traitement « enfant » aux moins de 15 ans. Cocher aussi les moins de 13 ans ferait entrer le jeu dans le programme Familles (SDK publicitaires certifiés, contraintes supplémentaires).
 - Accès à l'application : aucun identifiant nécessaire (compte anonyme créé automatiquement).
@@ -70,7 +72,7 @@ Aucune donnée n'est vendue. La partie « partagée » vient uniquement du SDK G
 - Suppression du compte dans l'app : oui (Paramètres, Compte).
 - App Tracking Transparency : la fenêtre iOS est affichée par le message « IDFA » configuré dans AdMob (Confidentialité et messages) ; le texte d'usage est dans `app.json`.
 - Manifeste de confidentialité : déclaré dans `app.json` (`ios.privacyManifests`) ; le SDK Google Mobile Ads apporte le sien.
-- Achats intégrés : déclarer les 3 produits consommables `perles_100`, `perles_550`, `perles_1200`.
+- Achats intégrés : déclarer les 3 produits consommables `perles_100`, `perles_550`, `perles_1200`, et l'abonnement auto-renouvelable `pass_capitaine` (1 mois, 4,99 €) dans un groupe d'abonnements « Pass Capitaine ». Apple exige dans la fiche et dans l'app le prix, la durée, le renouvellement automatique et les liens CGU / confidentialité : ils sont affichés dans la fenêtre du pass.
 
 ## Classification d'âge (IARC pour Google Play, questionnaire Apple)
 
@@ -79,7 +81,7 @@ Aucune donnée n'est vendue. La partie « partagée » vient uniquement du SDK G
 | Violence, peur, sexualité, langage grossier, drogues | Non |
 | Jeux d'argent réels | Non : aucune mise ni gain en argent réel |
 | Jeux de hasard simulés | Non |
-| Achats numériques | Oui |
+| Achats numériques | Oui (packs de perles et abonnement mensuel) |
 | Objets aléatoires payants (« loot boxes ») | Oui : la rareté d'un îlot acheté avec des perles (achetables) est tirée au hasard, probabilités affichées |
 | Interaction entre utilisateurs | Oui, limitée : nom de navigateur visible au classement et sur la carte, pas de messagerie |
 | Partage de la position | Non |

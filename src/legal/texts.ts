@@ -3,7 +3,7 @@
 // Fill in PUBLISHER below before publishing; every [BRACKETED] value is a placeholder.
 // Bump TERMS_VERSION when a change needs players to accept the terms again.
 
-export const TERMS_VERSION = 1;
+export const TERMS_VERSION = 2; // 2: Pass Capitaine subscription
 export const UPDATED = '14 octobre 2026';
 
 export const PUBLISHER = {
@@ -17,7 +17,7 @@ export const PUBLISHER = {
   site: '[ADRESSE DU SITE, par exemple https://exemple.github.io/archipel-des-perles]',
 };
 
-import { RARITIES } from '../game/rules';
+import { PASS, PASS_PERKS, RARITIES } from '../game/rules';
 
 const P = PUBLISHER;
 const ODDS = RARITIES.map(r => `${r.name} ${Math.round(r.odds * 100)} %`).join(', ');
@@ -123,31 +123,37 @@ const terms: LegalDoc = {
       `La rareté d’un îlot est tirée au hasard au moment de son acquisition. Les probabilités sont affichées avant chaque achat d’îlot et dans Paramètres, Infos : ${ODDS}. Elles peuvent changer pendant certains événements, qui l’annoncent.`,
     ] },
     { h: '5. Achats intégrés', body: [
-      'Des packs de perles sont vendus dans le jeu. Le prix est indiqué en euros, toutes taxes comprises, avant l’achat, avec le prix équivalent pour 100 perles. Le jeu indique aussi la valeur en euros des perles demandées pour un îlot.',
+      'Des packs de perles et un abonnement, le Pass Capitaine, sont vendus dans le jeu. Le prix est indiqué en euros, toutes taxes comprises, avant l’achat, avec le prix équivalent pour 100 perles. Le jeu indique aussi la valeur en euros des perles demandées pour un îlot.',
       'Le paiement est traité par l’App Store d’Apple ou Google Play, selon leurs conditions. Le contrat de vente est conclu avec l’éditeur dès la confirmation par le magasin.',
       'Les perles achetées sont livrées immédiatement. Conformément à l’article L221-28 13° du Code de la consommation, en confirmant votre achat vous demandez cette livraison immédiate et reconnaissez perdre votre droit de rétractation de 14 jours.',
       'En cas de perles non reçues ou de problème de paiement, contactez-nous ; les remboursements se demandent auprès d’Apple ou de Google selon leurs règles.',
       'Toutes les perles s’obtiennent aussi gratuitement en jouant (publicités, sondages, mini-jeux, quêtes, succès). Aucun achat n’est nécessaire pour progresser.',
     ] },
-    { h: '6. Publicités récompensées', body: [
+    { h: '6. Pass Capitaine (abonnement)', body: [
+      `Le Pass Capitaine est un abonnement mensuel à ${PASS.price} TTC par mois. Il donne, tant qu’il est actif : ${PASS_PERKS.map(x => x.charAt(0).toLowerCase() + x.slice(1)).join(' ; ')}.`,
+      'Il est renouvelé automatiquement chaque mois au même prix, sans durée minimale. Vous pouvez le résilier à tout moment, en quelques gestes, dans la gestion des abonnements de l’App Store ou de Google Play (un lien est proposé dans le jeu) ; il reste actif jusqu’à la fin de la période payée. Tout changement de prix vous sera annoncé à l’avance et vous pourrez alors résilier.',
+      'En vous abonnant, vous demandez l’accès immédiat au pass. Vous gardez votre droit de rétractation de 14 jours, mais vous paierez la part de l’abonnement déjà utilisée (article L221-25 du Code de la consommation). Le remboursement se demande auprès d’Apple ou de Google.',
+      'Le pass n’est pas nécessaire pour progresser : perles et îlots s’obtiennent tous en jouant gratuitement.',
+    ] },
+    { h: '7. Publicités récompensées', body: [
       'Regarder une publicité est toujours facultatif. La récompense est accordée quand la régie confirme que la publicité a été vue jusqu’au bout.',
     ] },
-    { h: '7. Règles de conduite', body: [
+    { h: '8. Règles de conduite', body: [
       'Il est interdit de tricher (modifier l’application, automatiser des actions, exploiter un bug), de créer plusieurs comptes pour abuser du parrainage, et de choisir un nom injurieux, haineux, à caractère sexuel ou portant atteinte aux droits d’autrui.',
       `Pour signaler un nom ou un contenu illicite, écrivez à ${P.email} en indiquant le nom concerné et la raison. Nous pouvons renommer, suspendre ou supprimer un compte qui ne respecte pas ces règles, après vous avoir informé du motif sauf urgence.`,
     ] },
-    { h: '8. Disponibilité et responsabilité', body: [
+    { h: '9. Disponibilité et responsabilité', body: [
       'Nous faisons notre possible pour que le jeu fonctionne en continu, sans pouvoir le garantir. Le jeu peut être modifié, interrompu pour maintenance ou arrêté ; en cas d’arrêt définitif, nous préviendrons les joueurs au moins 30 jours à l’avance.',
       'Ces conditions ne limitent pas les garanties légales dont vous bénéficiez comme consommateur, notamment la garantie de conformité des contenus numériques.',
     ] },
-    { h: '9. Propriété intellectuelle', body: [
+    { h: '10. Propriété intellectuelle', body: [
       'Le jeu, son nom, ses illustrations, ses textes et son code sont protégés. Toute reproduction sans autorisation est interdite.',
     ] },
-    { h: '10. Données personnelles', body: ['Voir la politique de confidentialité, accessible dans le jeu et sur notre site.'] },
-    { h: '11. Modification des conditions', body: [
+    { h: '11. Données personnelles', body: ['Voir la politique de confidentialité, accessible dans le jeu et sur notre site.'] },
+    { h: '12. Modification des conditions', body: [
       'Nous pouvons modifier ces conditions. Les changements importants vous seront présentés dans le jeu et devront être acceptés pour continuer à jouer.',
     ] },
-    { h: '12. Litiges', body: [
+    { h: '13. Litiges', body: [
       'Ces conditions sont soumises au droit français. En cas de difficulté, contactez-nous d’abord par e-mail.',
       `Si aucune solution n’est trouvée, vous pouvez recourir gratuitement au médiateur de la consommation : ${P.mediator}. Les tribunaux compétents sont ceux prévus par la loi ; si vous résidez dans un autre pays de l’Union européenne, vous gardez la protection des règles impératives de votre pays.`,
       `Dernière mise à jour : ${UPDATED}.`,
@@ -191,6 +197,7 @@ const deletion: LegalDoc = {
     { h: 'Ce qui est supprimé', body: [
       'Votre compte, votre adresse e-mail, vos îlots, perles, doublons, décorations, succès, réponses aux sondages, preuves de visionnage publicitaire et historique d’achats. Rien n’est conservé, sauf les journaux techniques de l’hébergeur, effacés automatiquement après quelques jours.',
       'Les achats déjà faits ne sont pas remboursés par la suppression. Les reçus restent chez Apple ou Google, selon leurs propres règles.',
+      'Supprimer le compte ne résilie pas un Pass Capitaine en cours : résiliez-le d’abord dans les abonnements de l’App Store ou de Google Play.',
     ] },
   ],
 };

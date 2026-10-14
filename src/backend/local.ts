@@ -64,14 +64,14 @@ export function createLocalBackend(): Backend {
     catchCreature: () => apply(() => R.catchCreature(s, now())),
     decorate: (q, r, id) => apply(() => R.decorate(s, q, r, id, now())),
     claimAchievement: id => apply(() => R.claimAchievement(s, id)),
-    purchase: id => apply(() => R.grantPurchase(s, id)),
+    purchase: id => apply(() => R.grantPurchase(s, id, now())),
     async applyReferral() {
       throw new R.GameError('Le parrainage fonctionne avec un compte en ligne.');
     },
     async othersNear() { return []; },
     async leaderboard() {
       const t = R.settle(s, now());
-      return [{ username: s.username, tiles: R.tileCount(s), coins: t.coins, flag: s.flag, me: true }];
+      return [{ username: s.username, tiles: R.tileCount(s), coins: t.coins, flag: s.flag, me: true, pass: R.hasPass(s, now()) }];
     },
     account: () => ({ online: false, email: null, anonymous: true }),
     async linkEmail() {

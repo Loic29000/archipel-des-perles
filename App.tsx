@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle as SvgCircle } from 'react-native-svg';
 import { Backend, createBackend } from './src/backend';
@@ -17,7 +17,7 @@ import { loadJSON, saveJSON } from './src/services/storage';
 import { PopItem, Pops } from './src/ui/fx';
 import { HexMap } from './src/ui/HexMap';
 import {
-  BoltIcon, BookIcon, BottleIcon, ClipboardIcon, CoinIcon, FlameIcon, GearIcon, GiftIcon, InfoIcon, IslandIcon, LighthouseIcon,
+  BoltIcon, BookIcon, BottleIcon, ClipboardIcon, CoinIcon, CompassIcon, FlameIcon, GearIcon, GiftIcon, InfoIcon, IslandIcon, LighthouseIcon,
   MoreIcon, PearlIcon, ScrollIcon, ShellIcon, ShopIcon, TrophyIcon, TvIcon, UserIcon,
 } from './src/ui/icons';
 import { CreatureArt, DecoArt, Island, IslandBase, tileHash } from './src/ui/island';
@@ -41,7 +41,8 @@ type Overlay =
   | { type: 'tutorial'; step: number; next?: Overlay | null }
   | { type: 'settings'; page: SettingsPage }
   | { type: 'recap'; away: number; gain: number; next?: Overlay | null }
-  | { type: 'buy'; product: R.ProductId; waiver?: boolean; parent?: boolean };
+  | { type: 'buy'; product: R.PackId; waiver?: boolean; parent?: boolean }
+  | { type: 'pass'; waiver?: boolean; parent?: boolean };
 
 const fmtInt = (n: number) => Math.floor(n).toLocaleString('fr-FR');
 const fmtCoins = (n: number) => {
@@ -250,6 +251,7 @@ function Game() {
   const ready = (t: number) => now >= t;
   const minor = settings.ageGroup !== 'adult';
   const streak = R.streakInfo(s, now);
+  const pass = R.hasPass(s, now);
   const ev = R.eventAt(now);
   const creatureKind = ev ? ev.creature : null;
   const creature = creatureKind && count > 0 && ready(s.cd.event) ? creatureSpot(s, Math.floor(now / R.HOUR), creatureKind) : null;
@@ -465,9 +467,9 @@ function Game() {
         <EarnRow icon={<ClipboardIcon size={20} color="#fff" />} color={c.own} title="Sondage" sub="3 questions · +3 perles · toutes les 2 h"
           label={cdLabel(s!.cd.survey, 'Répondre')} disabled={!ready(s!.cd.survey)} isReady={ready(s!.cd.survey)}
           onPress={() => setOverlay({ type: 'survey' })} />
-        <EarnRow icon={<BottleIcon size={20} color="#fff" />} color="#3d98b0" title="Pêche aux bouteilles" sub="12 s · 1 perle par 5 bouteilles, 3 max"
+        <EarnRow icon={<BottleIcon size={20} color="#fff" />} color="#3d98b0" title="Pêche aux bouteilles" sub={`12 s · 1 perle par 5 bouteilles, 3 max · ${pass ? 'toutes les 40 min' : 'toutes les heures'}`}
           label={cdLabel(s!.cd.fish, 'Jouer')} disabled={!ready(s!.cd.fish)} isReady={ready(s!.cd.fish)} onPress={() => startGame('fish')} />
-        <EarnRow icon={<ShellIcon size={20} color="#fff" />} color={c.epic} title="Mémoire des coquillages" sub="40 s · 1 perle par 2 paires, 3 si tout trouvé"
+        <EarnRow icon={<ShellIcon size={20} color="#fff" />} color={c.epic} title="Mémoire des coquillages" sub={`40 s · 1 perle par 2 paires, 3 si tout trouvé · ${pass ? 'toutes les 40 min' : 'toutes les heures'}`}
           label={cdLabel(s!.cd.memo, 'Jouer')} disabled={!ready(s!.cd.memo)} isReady={ready(s!.cd.memo)} onPress={() => startGame('memo')} />
         <T c={c} muted style={{ fontSize: 11, textAlign: 'center' }}>Une courte publicité précède chaque mini-jeu.</T>
         {demo && <EarnRow icon={<GiftIcon size={20} color="#fff" />} color={c.accentDeep} title="Démo" sub="Pour tester sans attendre" label="+100 perles"
@@ -479,6 +481,7 @@ function Game() {
   function BoostTab() {
     const tier = R.tierMult(count);
     const left = Math.max(0, s!.boostUntil - now);
+    const capH = R.maxBoost(s!, now) / R.HOUR;
     const mult = sup ? R.SUPER_MULT : tier;
     let lo = 1;
     return (
@@ -490,11 +493,11 @@ function Game() {
             </View>
             <View style={{ flex: 1, gap: 2 }}>
               <T c={c} style={{ fontWeight: '700', fontSize: 16 }}>{boosting ? `Boost actif · ${dur(left)}` : 'Boost en pause'}</T>
-              <T c={c} muted style={{ fontSize: 12, lineHeight: 17 }}>Chaque pub ajoute 1 h, jusqu’à 6 h en réserve. Avec {plural(count, 'îlot')}, la rente est multipliée par {tier}.</T>
+              <T c={c} muted style={{ fontSize: 12, lineHeight: 17 }}>Chaque pub ajoute 1 h, jusqu’à {capH} h en réserve{pass ? ' grâce au Pass Capitaine' : ''}. Avec {plural(count, 'îlot')}, la rente est multipliée par {tier}.</T>
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 4 }}>
-            {Array.from({ length: 6 }, (_, i) => {
+            {Array.from({ length: capH }, (_, i) => {
               const f = Math.max(0, Math.min(1, left / R.HOUR - i));
               return (
                 <View key={i} style={{ flex: 1, height: 12, borderRadius: 4, backgroundColor: c.line, overflow: 'hidden' }}>
@@ -503,7 +506,7 @@ function Game() {
               );
             })}
           </View>
-          <Btn c={c} icon={<BoltIcon size={18} color={c.accentInk} />} label="Regarder une pub · +1 h de boost" disabled={busy || count === 0 || left > R.MAX_BOOST - R.HOUR}
+          <Btn c={c} icon={<BoltIcon size={18} color={c.accentInk} />} label="Regarder une pub · +1 h de boost" disabled={busy || count === 0 || left > R.maxBoost(s!, now) - R.HOUR}
             onPress={() => watchAd('boost', 'Publicité · +1 h de boost', () => reward(`+1 h ×${R.boostMult(s!, backend.now())}`, 'boost'))} />
         </Card>
         <Card c={c} highlight={sup ? c.bad : undefined} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
@@ -644,6 +647,20 @@ function Game() {
           <T c={c} style={{ fontWeight: '700' }}>Boutique</T>
           <View style={[st.tag, { backgroundColor: c.epic }]}><T c={c} style={{ fontSize: 10, fontWeight: '700', color: '#fff' }}>MODE TEST · AUCUN PAIEMENT</T></View>
         </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Pass Capitaine" disabled={busy} onPress={() => { play('tap'); setOverlay({ type: 'pass' }); }}
+          style={{ padding: 12, borderRadius: 16, backgroundColor: c.card, borderWidth: 2, borderColor: c.epic, gap: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={[st.disc, { backgroundColor: c.epic }]}><CompassIcon size={22} color="#fff" /></View>
+            <View style={{ flex: 1 }}>
+              <T c={c} style={{ fontWeight: '700' }}>{R.PASS.name}</T>
+              <T c={c} muted style={{ fontSize: 12 }}>{pass ? `Actif jusqu’au ${new Date(s!.passUntil).toLocaleDateString('fr-FR')}` : `${R.PASS.price} par mois · sans engagement`}</T>
+            </View>
+            <View style={[st.tag, { backgroundColor: pass ? c.good : c.epic, paddingHorizontal: 12, paddingVertical: 5 }]}>
+              <T c={c} style={{ fontWeight: '700', fontSize: 12, color: '#fff' }}>{pass ? 'Actif ✓' : 'Découvrir'}</T>
+            </View>
+          </View>
+          {R.PASS_PERKS.map(x => <T key={x} c={c} muted style={{ fontSize: 12 }}>• {x}</T>)}
+        </Pressable>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {R.PRODUCTS.map(p => {
             return (
@@ -880,6 +897,39 @@ function Game() {
           </MessageCard>
         );
       }
+      case 'pass': {
+        const until = new Date(Math.max(now, s!.passUntil) + R.PASS.days * R.DAY).toLocaleDateString('fr-FR');
+        const manage = Platform.select({ ios: 'https://apps.apple.com/account/subscriptions', android: 'https://play.google.com/store/account/subscriptions' });
+        return (
+          <MessageCard c={c} title={`${R.PASS.name} · ${R.PASS.price} / mois`} action={pass ? 'Prolonger d’un mois (test)' : 'S’abonner (test)'} onCancel={() => setOverlay(null)}
+            body={`Abonnement mensuel renouvelé automatiquement au même prix, sans engagement : résiliable à tout moment dans les abonnements de l’App Store ou de Google Play, l’avantage reste actif jusqu’à la fin du mois payé. Mode test : aucun paiement, ${pass ? 'prolonge' : 'active'} le pass jusqu’au ${until}.`}
+            icon={<View style={[st.bigDisc, { backgroundColor: c.epic }]}><CompassIcon size={34} color="#fff" /></View>}
+            disabled={!overlay.waiver || (minor && !overlay.parent)}
+            onClose={async () => {
+              setOverlay(null);
+              const st2 = await act(() => backend.purchase(R.PASS.id));
+              if (!st2) return;
+              setS(st2);
+              play('legend');
+              reward(pass ? 'Pass prolongé' : 'Pass activé', 'boost');
+            }}>
+            <View style={{ gap: 3 }}>{R.PASS_PERKS.map(x => <T key={x} c={c} style={{ fontSize: 13 }}>✓ {x}</T>)}</View>
+            <Check c={c} value={!!overlay.waiver} onChange={v => setOverlay({ ...overlay, waiver: v })}>
+              <T c={c} style={{ fontSize: 13, lineHeight: 18 }}>Je demande l’accès immédiat au pass. Si je me rétracte dans les 14 jours, je paierai la part déjà utilisée.</T>
+            </Check>
+            {minor && (
+              <Check c={c} value={!!overlay.parent} onChange={v => setOverlay({ ...overlay, parent: v })}>
+                <T c={c} style={{ fontSize: 13, lineHeight: 18 }}>Un parent ou tuteur est d’accord pour cet abonnement.</T>
+              </Check>
+            )}
+            {pass && manage && (
+              <Pressable accessibilityRole="link" onPress={() => Linking.openURL(manage)}>
+                <T c={c} style={{ color: c.own, fontWeight: '700', fontSize: 13 }}>Gérer ou résilier mon abonnement</T>
+              </Pressable>
+            )}
+          </MessageCard>
+        );
+      }
       case 'tutorial': {
         const [title, body] = TUTORIAL[overlay.step];
         const last = overlay.step === TUTORIAL.length - 1;
@@ -911,7 +961,10 @@ function Game() {
           {/* ---- resources */}
           <View onLayout={e => setHudH(e.nativeEvent.layout.height + e.nativeEvent.layout.y)} style={[st.hud, { backgroundColor: c.panel, borderColor: c.line }]}>
             <View style={[k.row, { gap: 6 }]}>
-              <T c={c} display style={{ fontWeight: '700', fontSize: 15, flexShrink: 1 }} numberOfLines={1}>Archipel des Perles</T>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 }}>
+                <T c={c} display style={{ fontWeight: '700', fontSize: 15, flexShrink: 1 }} numberOfLines={1}>Archipel des Perles</T>
+                {pass && <CompassIcon size={16} color={c.accentDeep} />}
+              </View>
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 {demo && <View style={[st.tag, { backgroundColor: c.accent }]}><T c={c} style={{ fontSize: 10, fontWeight: '700', color: c.accentInk }}>DÉMO</T></View>}
                 <Pressable accessibilityRole="button" accessibilityLabel={`Bonus de connexion, série de ${plural(streak.count, 'jour')}`} hitSlop={6}
@@ -1039,6 +1092,7 @@ function Ranking({ c, backend }: { c: Palette; backend: Backend }) {
           <T c={c} num style={{ width: 28 }}>{i + 1}</T>
           <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: FLAG_COLORS[r.flag] ?? c.muted }} />
           <T c={c} style={{ flex: 1, fontWeight: r.me ? '700' : '400' }} numberOfLines={1}>{r.username}{r.me ? ' (vous)' : ''}</T>
+          {r.pass && <CompassIcon size={15} color={c.accentDeep} />}
           <T c={c} num style={{ fontSize: 13 }}>{r.tiles} îlots</T>
         </View>
       ))}
