@@ -10,7 +10,8 @@ Application Expo (React Native) pour iOS, Android et le web, avec un serveur Sup
 | --- | --- |
 | Règles du jeu (fonctions pures) | `src/game/rules.ts`, `src/game/world.ts` |
 | Mode hors ligne / démo (règles sur l'appareil) | `src/backend/local.ts` |
-| Mode en ligne (comptes, sauvegarde, anti-triche) | `src/backend/online.ts`, `supabase/migrations/0001_init.sql` |
+| Mode en ligne (comptes, sauvegarde, anti-triche) | `src/backend/online.ts`, `supabase/migrations/` |
+| Paramètres et infos (règles, confidentialité, suppression du compte) | `src/ui/SettingsScreen.tsx` |
 | Vérification des pubs AdMob côté serveur | `supabase/functions/admob-ssv/index.ts` |
 | Pubs, notifications, sons, vibrations | `src/services/*.native.ts` (mobile) et `src/services/*.ts` (web) |
 | Écran, carte, mini-jeux, tutoriel | `App.tsx`, `src/ui/` |
@@ -37,7 +38,7 @@ npx expo start --dev-client
 
 1. Créez un projet sur supabase.com.
 2. Dans Authentication > Providers, activez **Anonymous sign-ins** (les joueurs démarrent sans inscription) et **Email** (pour sauvegarder leur partie).
-3. Exécutez `supabase/migrations/0001_init.sql` dans l'éditeur SQL, ou `supabase db push` avec la CLI.
+3. Exécutez les fichiers de `supabase/migrations/` dans l'ordre (`0001_init.sql`, puis `0002_delete_account.sql`) dans l'éditeur SQL, ou `supabase db push` avec la CLI.
 4. Copiez `.env.example` en `.env` et renseignez l'URL et la clé `anon` du projet.
 
 Toutes les écritures passent par des fonctions SQL qui utilisent l'horloge du serveur : un joueur ne peut ni modifier ses perles, ni sauter un délai, ni choisir sa rareté. Le biome de chaque îlot est recalculé côté serveur avec le même bruit que le client (`biome_at`, testé par `npm run test:sql`).

@@ -1,7 +1,7 @@
 // Offline backend: the rules run on the device and the game is saved locally.
 // Used for the web prototype, for demo mode, and when no server is configured.
 import * as R from '../game/rules';
-import { loadJSON, saveJSON } from '../services/storage';
+import { loadJSON, removeKey, saveJSON } from '../services/storage';
 import type { Backend } from './types';
 
 const DEMO_SPEED = 600; // 1 s = 10 min
@@ -71,6 +71,10 @@ export function createLocalBackend(): Backend {
     account: () => ({ online: false, email: null, anonymous: true }),
     async linkEmail() {
       throw new R.GameError('Les comptes demandent une connexion au serveur du jeu.');
+    },
+    async resetAll() {
+      await removeKey(slot());
+      return load();
     },
     demo: {
       enabled: () => demo,

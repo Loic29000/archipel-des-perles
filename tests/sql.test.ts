@@ -10,7 +10,7 @@ const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as
   await db.exec(`create role anon; create role authenticated; create schema auth;
     create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true),'')::uuid $$;`);
-  await db.exec(readFileSync(new URL('../supabase/migrations/0001_init.sql', import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_delete_account.sql']) await db.exec(readFileSync(new URL(`../supabase/migrations/${m}`, import.meta.url), 'utf8'));
   // world parity
   let bad = 0;
   for (let a = -30; a <= 30; a += 3) for (let b = -30; b <= 30; b += 3) {
@@ -50,4 +50,9 @@ const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as
   // rent settle: backdate coins_at by one day with 2 tiles
   await db.exec(`update profiles set coins=0, coins_at = coins_at - 86400000, boost_until=0 where id='${u1}'`);
   console.log('1 day rent', (await as(u1, 'select get_state() j')).j.s.coins);
+  // u2 was referred by u1: deleting u1 must keep u2 and remove all of u1's rows
+  await as(u1, 'select delete_account()');
+  const left = await q(`select (select count(*) from auth.users where id='${u1}') u, (select count(*) from profiles where id='${u1}') p,
+    (select count(*) from tiles where owner='${u1}') t, (select count(*) from profiles where id='${u2}') other`);
+  console.log('delete account', JSON.stringify(left[0]));
 })();

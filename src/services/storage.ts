@@ -10,6 +10,14 @@ export async function loadJSON<T>(k: string): Promise<T | null> {
   }
 }
 
+export async function removeKey(k: string): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(k);
+  } catch {
+    // ignore
+  }
+}
+
 export async function saveJSON(k: string, v: unknown): Promise<void> {
   try {
     await AsyncStorage.setItem(k, JSON.stringify(v));

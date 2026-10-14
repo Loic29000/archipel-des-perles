@@ -4,7 +4,10 @@ const NOTES: Record<Sound, number[]> = { tap: [880], coin: [1318, 1760], reveal:
 let enabled = true;
 let ctx: AudioContext | null = null;
 
+let haptics = true;
+
 export function setSoundOn(on: boolean) { enabled = on; }
+export function setHapticsOn(on: boolean) { haptics = on; }
 
 export function play(s: Sound) {
   if (!enabled) return;
@@ -28,6 +31,7 @@ export function play(s: Sound) {
 }
 
 export function buzz(kind: 'light' | 'success' | 'error') {
+  if (!haptics) return;
   try {
     navigator.vibrate?.(kind === 'light' ? 10 : kind === 'success' ? [20, 40, 30] : [60, 30, 60]);
   } catch {

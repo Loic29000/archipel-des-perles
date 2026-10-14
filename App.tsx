@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle as SvgCircle } from 'react-native-svg';
 import { Backend, createBackend } from './src/backend';
@@ -8,20 +8,21 @@ import type { LeaderRow, WorldTile } from './src/backend/types';
 import * as R from './src/game/rules';
 import { biomeAt, BIOMES, key, parseKey } from './src/game/world';
 import { adsSimulated, showRewardedAd } from './src/services/ads';
-import { buzz, play, setSoundOn } from './src/services/feedback';
+import { buzz, play, setHapticsOn, setSoundOn } from './src/services/feedback';
 import { useGameFonts } from './src/services/fonts';
 import { enableNotifications, Reminder, scheduleReminders } from './src/services/notify';
 import { loadJSON, saveJSON } from './src/services/storage';
 import { PopItem, Pops } from './src/ui/fx';
 import { HexMap } from './src/ui/HexMap';
 import {
-  BoltIcon, BookIcon, BottleIcon, ClipboardIcon, CoinIcon, FlameIcon, GiftIcon, IslandIcon, LighthouseIcon,
+  BoltIcon, BookIcon, BottleIcon, ClipboardIcon, CoinIcon, FlameIcon, GearIcon, GiftIcon, InfoIcon, IslandIcon, LighthouseIcon,
   MoreIcon, PearlIcon, ScrollIcon, ShellIcon, ShopIcon, TrophyIcon, TvIcon, UserIcon,
 } from './src/ui/icons';
 import { Island, IslandBase, tileHash } from './src/ui/island';
-import { Badge, Btn, Card, Progress, styles as k, T } from './src/ui/kit';
+import { Badge, Btn, Card, CodeField, NameField, Progress, styles as k, T } from './src/ui/kit';
 import { AdOverlay, FishingLayer, MemoryPanel, MessageCard, RevealCard, SurveyPanel, TUTORIAL } from './src/ui/Overlays';
-import { FLAG_COLORS, fonts, Palette, RARITY_COLORS, usePalette } from './src/ui/theme';
+import { Settings, SettingsPage, SettingsScreen } from './src/ui/SettingsScreen';
+import { FLAG_COLORS, Palette, RARITY_COLORS, usePalette } from './src/ui/theme';
 
 type Tab = 'tile' | 'earn' | 'boost' | 'quests' | 'more';
 type More = 'shop' | 'ranking' | 'log' | 'profile';
@@ -33,7 +34,8 @@ type Overlay =
   | { type: 'survey' } | { type: 'memo' } | { type: 'fish' }
   | { type: 'reveal'; tile: R.Tile }
   | { type: 'msg'; title: string; body: string; action?: string; next?: Overlay | null; streak?: boolean }
-  | { type: 'tutorial'; step: number; next?: Overlay | null };
+  | { type: 'tutorial'; step: number; next?: Overlay | null }
+  | { type: 'settings'; page: SettingsPage };
 
 const fmtInt = (n: number) => Math.floor(n).toLocaleString('fr-FR');
 const fmtCoins = (n: number) => {
@@ -56,8 +58,11 @@ export default function App() {
   );
 }
 
+const DEFAULT_SETTINGS: Settings = { sound: true, haptics: true, notifications: false, tutorialDone: false, theme: 'auto' };
+
 function Game() {
-  const c = usePalette();
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const c = usePalette(settings.theme);
   const fontsReady = useGameFonts();
   const backend = useMemo<Backend>(() => createBackend(), []);
   const [s, setS] = useState<R.GameState | null>(null);
@@ -74,7 +79,6 @@ function Game() {
   const [pops, setPops] = useState<PopItem[]>([]);
   const [hudH, setHudH] = useState(0);
   const [sheetH, setSheetH] = useState(0);
-  const [settings, setSettings] = useState({ sound: true, notifications: false, tutorialDone: false });
   const [demo, setDemo] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const popId = useRef(0);
@@ -106,9 +110,10 @@ function Game() {
   // ---------------------------------------------------------------- boot
   useEffect(() => {
     (async () => {
-      const saved = (await loadJSON<typeof settings>('archipel:settings')) ?? settings;
+      const saved = { ...DEFAULT_SETTINGS, ...(await loadJSON<Partial<Settings>>('archipel:settings')) };
       setSettings(saved);
       setSoundOn(saved.sound);
+      setHapticsOn(saved.haptics);
       try {
         let st = await backend.init();
         setDemo(!!backend.demo?.enabled());
@@ -134,10 +139,24 @@ function Game() {
     return () => clearInterval(id);
   }, []);
 
-  const updateSettings = (patch: Partial<typeof settings>) => {
-    const next = { ...settings, ...patch };
-    setSettings(next);
-    saveJSON('archipel:settings', next);
+  const updateSettings = (patch: Partial<Settings>) => {
+    setSettings(prev => {
+      const next = { ...prev, ...patch };
+      saveJSON('archipel:settings', next);
+      return next;
+    });
+  };
+  // settings whose change has a side effect beyond being saved
+  const changeSetting = async (patch: Partial<Settings>) => {
+    if (patch.sound !== undefined) setSoundOn(patch.sound);
+    if (patch.haptics !== undefined) { setHapticsOn(patch.haptics); if (patch.haptics) buzz('light'); }
+    if (patch.notifications !== undefined) {
+      const ok = patch.notifications ? await enableNotifications() : true;
+      patch = { notifications: patch.notifications && ok };
+      if (!patch.notifications) scheduleReminders([]);
+      if (!ok) say('Autorisez les notifications dans les réglages du téléphone.');
+    }
+    updateSettings(patch);
   };
 
   // ---------------------------------------------------------------- neighbours (online only)
@@ -248,6 +267,14 @@ function Game() {
     const st2 = await act(fn);
     if (st2) { setS(st2); if (gain) reward(gain[0], gain[1]); }
   };
+
+  async function toggleDemo() {
+    await backend.demo!.toggle();
+    const st2 = (await backend.dailyLogin()).s;
+    setDemo(backend.demo!.enabled()); setS(st2);
+    setSelected(R.tileCount(st2) ? null : st2.spawn);
+    setFocus({ at: st2.spawn, nonce: Date.now() });
+  }
 
   // ---------------------------------------------------------------- tab contents
   function TileTab() {
@@ -525,13 +552,12 @@ function Game() {
     const acc = backend.account();
     return (
       <View style={{ gap: 10 }}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Btn c={c} small kind="secondary" icon={<GearIcon size={16} color={c.ink} />} label="Paramètres" onPress={() => setOverlay({ type: 'settings', page: 'settings' })} style={{ flex: 1 }} />
+          <Btn c={c} small kind="secondary" icon={<InfoIcon size={16} color={c.ink} />} label="Infos et règles" onPress={() => setOverlay({ type: 'settings', page: 'info' })} style={{ flex: 1 }} />
+        </View>
+        <T c={c} style={{ fontWeight: '700' }}>Nom de navigateur</T>
         <NameField c={c} initial={s!.username} onSave={n => simple(() => backend.setUsername(n), ['Nom enregistré'])} />
-        <T c={c} style={{ fontWeight: '700' }}>Compte</T>
-        {acc.online
-          ? acc.anonymous
-            ? <EmailField c={c} onSave={async email => { const ok = await act(() => backend.linkEmail(email)); if (ok !== null) say('Vérifiez vos e-mails pour confirmer votre compte.'); }} />
-            : <T c={c} muted>Partie sauvegardée sur le serveur · {acc.email}</T>
-          : <T c={c} muted style={{ fontSize: 13 }}>Partie enregistrée sur cet appareil uniquement. La sauvegarde en ligne s’active quand le serveur du jeu est configuré.</T>}
         <T c={c} style={{ fontWeight: '700' }}>Parrainage</T>
         {acc.online ? (
           <>
@@ -539,17 +565,6 @@ function Game() {
             {!s!.referralUsed && <CodeField c={c} onSave={async code => { const r = await act(() => backend.applyReferral(code)); if (r) { setS(r.s); reward(`+${r.reward}`, 'pearl'); } }} />}
           </>
         ) : <T c={c} muted style={{ fontSize: 13 }}>Le parrainage demande un compte en ligne.</T>}
-        <T c={c} style={{ fontWeight: '700' }}>Réglages</T>
-        <SwitchRow c={c} label="Sons" value={settings.sound} onChange={v => { setSoundOn(v); updateSettings({ sound: v }); }} />
-        {Platform.OS !== 'web' && (
-          <SwitchRow c={c} label="Rappels (boost, pubs, série)" value={settings.notifications}
-            onChange={async v => { const ok = v ? await enableNotifications() : true; updateSettings({ notifications: v && ok }); if (!v) scheduleReminders([]); if (v && !ok) say('Autorisez les notifications dans les réglages du téléphone.'); }} />
-        )}
-        {backend.demo && (
-          <SwitchRow c={c} label="Mode démo (1 s = 10 min, partie séparée)" value={demo}
-            onChange={async () => { await backend.demo!.toggle(); const st2 = (await backend.dailyLogin()).s; setDemo(backend.demo!.enabled()); setS(st2); setSelected(R.tileCount(st2) ? null : st2.spawn); setFocus({ at: st2.spawn, nonce: Date.now() }); }} />
-        )}
-        <Btn c={c} small kind="secondary" label="Revoir le tutoriel" onPress={() => setOverlay({ type: 'tutorial', step: 0 })} style={{ alignSelf: 'flex-start' }} />
       </View>
     );
   }
@@ -626,6 +641,21 @@ function Game() {
           icon={overlay.streak ? <View style={[st.bigDisc, { backgroundColor: '#e2694f' }]}><FlameIcon size={34} color="#fff" /></View> : undefined}
           onClose={() => { if (overlay.streak) reward(`+${R.STREAK_REWARDS[((s!.streak.count - 1) % 7 + 7) % 7]}`, 'pearl'); setOverlay(overlay.next ?? null); }} />
       );
+      case 'settings': return (
+        <SettingsScreen c={c} page={overlay.page} settings={settings} onChange={changeSetting} account={backend.account()} online={backend.mode === 'online'}
+          username={s!.username} demo={{ available: !!backend.demo, on: demo }} onToggleDemo={toggleDemo}
+          onTutorial={() => setOverlay({ type: 'tutorial', step: 0 })}
+          onRename={n => simple(() => backend.setUsername(n), ['Nom enregistré'])}
+          onLinkEmail={async email => { const ok = await act(() => backend.linkEmail(email)); if (ok !== null) say('Vérifiez vos e-mails pour confirmer votre compte.'); }}
+          onReset={async () => {
+            const fresh = await act(async () => { await backend.resetAll(); return (await backend.dailyLogin()).s; });
+            if (!fresh) return;
+            const st2 = fresh;
+            setS(st2); setOthers(new Map()); setSelected(st2.spawn); setFocus({ at: st2.spawn, nonce: Date.now() }); setTab('tile');
+            setOverlay(null); say('Nouvelle partie : votre premier îlot vous attend.');
+          }}
+          onClose={() => setOverlay(null)} />
+      );
       case 'tutorial': {
         const [title, body] = TUTORIAL[overlay.step];
         const last = overlay.step === TUTORIAL.length - 1;
@@ -643,7 +673,7 @@ function Game() {
 
   return (
     <View style={[st.root, { backgroundColor: c.seaDeep }]}>
-      <StatusBar style="light" />
+      <StatusBar style={overlay?.type === 'settings' && c.scheme === 'light' ? 'dark' : 'light'} />
       <HexMap s={s} others={others} selected={selected} focus={focus} zoom={zoom} c={c} disabled={busy} insetTop={hudH} insetBottom={sheetH}
         onSelect={(q, r) => {
           const kk = key(q, r);
@@ -663,6 +693,10 @@ function Game() {
                   <FlameIcon size={13} color="#e2694f" />
                   <T c={c} style={{ fontSize: 11, fontWeight: '700' }}>{s.streak.count}</T>
                 </View>
+                <Pressable accessibilityRole="button" accessibilityLabel="Paramètres" hitSlop={8} onPress={() => { play('tap'); setOverlay({ type: 'settings', page: 'settings' }); }}
+                  style={[st.gear, { backgroundColor: c.card }]}>
+                  <GearIcon size={17} color={c.ink} />
+                </Pressable>
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -757,35 +791,6 @@ const PearlLine = ({ size = 22, color = '#000' }: { size?: number; color?: strin
   </Svg>
 );
 
-function SwitchRow({ c, label, value, onChange }: { c: Palette; label: string; value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <View style={k.row}>
-      <T c={c} style={{ flex: 1 }}>{label}</T>
-      <Switch value={value} onValueChange={onChange} trackColor={{ true: c.own, false: c.line }} />
-    </View>
-  );
-}
-
-function Field({ c, placeholder, initial = '', action, onSave, keyboard }: {
-  c: Palette; placeholder: string; initial?: string; action: string; onSave: (v: string) => void; keyboard?: 'email-address';
-}) {
-  const [v, setV] = useState(initial);
-  return (
-    <View style={[k.row, { gap: 8 }]}>
-      <TextInput value={v} onChangeText={setV} placeholder={placeholder} placeholderTextColor={c.muted} autoCapitalize="none" keyboardType={keyboard}
-        style={{ flex: 1, minWidth: 0, borderWidth: 1, borderColor: c.line, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, color: c.ink, fontFamily: fonts.body }} />
-      <Btn c={c} small label={action} disabled={!v.trim()} onPress={() => onSave(v.trim())} />
-    </View>
-  );
-}
-const NameField = ({ c, initial, onSave }: { c: Palette; initial: string; onSave: (v: string) => void }) =>
-  <Field c={c} placeholder="Votre nom de navigateur" initial={initial} action="Enregistrer" onSave={onSave} />;
-const EmailField = ({ c, onSave }: { c: Palette; onSave: (v: string) => void }) =>
-  <><T c={c} muted style={{ fontSize: 13 }}>Ajoutez un e-mail pour retrouver votre partie sur un autre téléphone.</T>
-    <Field c={c} placeholder="vous@exemple.fr" action="Sauvegarder" keyboard="email-address" onSave={onSave} /></>;
-const CodeField = ({ c, onSave }: { c: Palette; onSave: (v: string) => void }) =>
-  <Field c={c} placeholder="Code d’un ami" action="Valider" onSave={onSave} />;
-
 function Ranking({ c, backend }: { c: Palette; backend: Backend }) {
   const [rows, setRows] = useState<LeaderRow[] | null>(null);
   useEffect(() => { backend.leaderboard().then(setRows).catch(() => setRows([])); }, [backend]);
@@ -814,6 +819,7 @@ const st = StyleSheet.create({
   res: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, paddingHorizontal: 10, borderRadius: 14 },
   resLabel: { fontSize: 10, letterSpacing: 0.4 },
   tag: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  gear: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: -3, marginBottom: -3 },
   mapRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, borderWidth: 1,
     shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3 },

@@ -11,7 +11,10 @@ const SOURCES: Record<Sound, number> = {
 let enabled = true;
 const players: Partial<Record<Sound, AudioPlayer>> = {};
 
+let haptics = true;
+
 export function setSoundOn(on: boolean) { enabled = on; }
+export function setHapticsOn(on: boolean) { haptics = on; }
 
 export function play(s: Sound) {
   if (!enabled) return;
@@ -25,6 +28,7 @@ export function play(s: Sound) {
 }
 
 export function buzz(kind: 'light' | 'success' | 'error') {
+  if (!haptics) return;
   if (kind === 'light') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   else Haptics.notificationAsync(kind === 'success' ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error).catch(() => {});
 }

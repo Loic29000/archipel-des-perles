@@ -25,5 +25,7 @@ export interface Backend {
   leaderboard(): Promise<LeaderRow[]>;
   account(): Account;
   linkEmail(email: string): Promise<void>;
+  /** Erases the player's game (and online account), then starts a fresh one. */
+  resetAll(): Promise<GameState>;
   demo?: { enabled(): boolean; toggle(): Promise<GameState>; gift(): Promise<GameState> };
 }

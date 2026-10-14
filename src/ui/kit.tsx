@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, Switch, Text, TextInput, TextStyle, View, ViewStyle } from 'react-native';
 import { play } from '../services/feedback';
 import { fontFor, Palette } from './theme';
 
@@ -69,6 +69,38 @@ export function Badge({ c, n }: { c: Palette; n: number | true }) {
     </View>
   );
 }
+
+export function SwitchRow({ c, label, sub, value, onChange }: { c: Palette; label: string; sub?: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <View style={styles.row}>
+      <View style={{ flex: 1 }}>
+        <T c={c}>{label}</T>
+        {sub && <T c={c} muted style={{ fontSize: 12 }}>{sub}</T>}
+      </View>
+      <Switch value={value} onValueChange={onChange} trackColor={{ true: c.own, false: c.line }} />
+    </View>
+  );
+}
+
+export function Field({ c, placeholder, initial = '', action, onSave, keyboard }: {
+  c: Palette; placeholder: string; initial?: string; action: string; onSave: (v: string) => void; keyboard?: 'email-address';
+}) {
+  const [v, setV] = useState(initial);
+  return (
+    <View style={[styles.row, { gap: 8 }]}>
+      <TextInput value={v} onChangeText={setV} placeholder={placeholder} placeholderTextColor={c.muted} autoCapitalize="none" keyboardType={keyboard}
+        style={{ flex: 1, minWidth: 0, borderWidth: 1, borderColor: c.line, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, color: c.ink, ...fontFor('body', '400') }} />
+      <Btn c={c} small label={action} disabled={!v.trim()} onPress={() => onSave(v.trim())} />
+    </View>
+  );
+}
+export const NameField = ({ c, initial, onSave }: { c: Palette; initial: string; onSave: (v: string) => void }) =>
+  <Field c={c} placeholder="Votre nom de navigateur" initial={initial} action="Enregistrer" onSave={onSave} />;
+export const EmailField = ({ c, onSave }: { c: Palette; onSave: (v: string) => void }) =>
+  <><T c={c} muted style={{ fontSize: 13 }}>Ajoutez un e-mail pour retrouver votre partie sur un autre téléphone.</T>
+    <Field c={c} placeholder="vous@exemple.fr" action="Sauvegarder" keyboard="email-address" onSave={onSave} /></>;
+export const CodeField = ({ c, onSave }: { c: Palette; onSave: (v: string) => void }) =>
+  <Field c={c} placeholder="Code d’un ami" action="Valider" onSave={onSave} />;
 
 export const styles = StyleSheet.create({
   btn: { flexDirection: 'row', gap: 6, paddingVertical: 11, paddingHorizontal: 16, borderRadius: 14, borderBottomWidth: 3, alignItems: 'center', justifyContent: 'center' },

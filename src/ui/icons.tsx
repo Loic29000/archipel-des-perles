@@ -146,6 +146,30 @@ export function GiftIcon({ size = 22, color = '#000' }: P) {
     </Svg>
   );
 }
+export function GearIcon({ size = 22, color = '#000' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Circle cx="12" cy="12" r="3.2" {...stroke(color)} />
+      <Path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7" {...stroke(color)} />
+      <Circle cx="12" cy="12" r="6.6" {...stroke(color)} />
+    </Svg>
+  );
+}
+export function InfoIcon({ size = 22, color = '#000' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Circle cx="12" cy="12" r="9" {...stroke(color)} />
+      <Path d="M12 11v5.5M12 7.6v.1" {...stroke(color)} />
+    </Svg>
+  );
+}
+export function BackIcon({ size = 22, color = '#000' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M15 5l-7 7 7 7" {...stroke(color)} />
+    </Svg>
+  );
+}
 export function LighthouseIcon({ size = 22, color = '#000' }: P) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">

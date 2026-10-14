@@ -24,18 +24,26 @@ export function createOnlineBackend(url: string, anonKey: string): Backend {
     return env;
   }
 
+  async function init() {
+    const { data } = await sb.auth.getSession();
+    if (!data.session) {
+      const { error } = await sb.auth.signInAnonymously();
+      if (error) throw new GameError('Connexion au serveur impossible : ' + error.message);
+    }
+    const { data: u } = await sb.auth.getUser();
+    account = { online: true, email: u.user?.email ?? null, anonymous: !!u.user?.is_anonymous, userId: u.user?.id };
+    return (await rpc('get_state')).s;
+  }
+
   return {
     mode: 'online',
     now: () => Date.now() + offset,
-    async init() {
-      const { data } = await sb.auth.getSession();
-      if (!data.session) {
-        const { error } = await sb.auth.signInAnonymously();
-        if (error) throw new GameError('Connexion au serveur impossible : ' + error.message);
-      }
-      const { data: u } = await sb.auth.getUser();
-      account = { online: true, email: u.user?.email ?? null, anonymous: !!u.user?.is_anonymous, userId: u.user?.id };
-      return (await rpc('get_state')).s;
+    init,
+    async resetAll() {
+      const { error } = await sb.rpc('delete_account');
+      if (error) throw new GameError(error.message);
+      await sb.auth.signOut();
+      return init();
     },
     dailyLogin: async () => { const e = await rpc('daily_login'); return { s: e.s, reward: e.reward ?? 0 }; },
     claim: async (q, r) => { const e = await rpc('claim_tile', { tq: q, tr: r }); return { s: e.s, tile: e.tile! }; },

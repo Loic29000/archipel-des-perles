@@ -3,6 +3,7 @@ import type { Biome } from '../game/world';
 import type { FlagId } from '../game/rules';
 
 const light = {
+  scheme: 'light' as 'light' | 'dark',
   sea: '#7fcfd9', seaDeep: '#3d98b0', seaLine: '#b8ecf0', foam: '#ffffff',
   paper: '#f4efe2', ink: '#12313b', muted: '#5d747a',
   accent: '#f2b225', accentDeep: '#d98e0b', accentInk: '#2a1d00',
@@ -14,6 +15,7 @@ const light = {
   deco: { plage: '#2f8f4e', prairie: '#ffffff', foret: '#2c6b3a', marais: '#4c7d62', montagne: '#8a7f72', volcan: '#3b2622' } as Record<Biome, string>,
 };
 const dark: typeof light = {
+  scheme: 'dark',
   sea: '#0f4253', seaDeep: '#071d27', seaLine: '#2c6c7c', foam: '#bfe9ef',
   paper: '#0b1a20', ink: '#e8f1ec', muted: '#8fa8a7',
   accent: '#f5bd3b', accentDeep: '#d4920e', accentInk: '#241800',
@@ -29,8 +31,10 @@ export type Palette = typeof light;
 export const FLAG_COLORS: Record<FlagId, string> = { lagon: '#0f8b96', corail: '#e2694f', safran: '#e0a21b', algue: '#4c8b3c', nuit: '#3b3f8f' };
 export const RARITY_COLORS = (c: Palette) => [c.muted, c.good, c.epic, c.accent];
 
-export function usePalette(): Palette {
-  return useColorScheme() === 'dark' ? dark : light;
+export type ThemeMode = 'auto' | 'light' | 'dark';
+export function usePalette(mode: ThemeMode = 'auto'): Palette {
+  const system = useColorScheme();
+  return (mode === 'auto' ? system === 'dark' : mode === 'dark') ? dark : light;
 }
 
 // Web loads the families from Google Fonts and picks the weight with fontWeight.
