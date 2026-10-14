@@ -24,6 +24,7 @@ import { CreatureArt, DecoArt, Island, IslandBase, tileHash } from './src/ui/isl
 import { Badge, Btn, Card, Check, CodeField, NameField, Progress, styles as k, T } from './src/ui/kit';
 import { AdOverlay, FishingLayer, MemoryPanel, MessageCard, RevealCard, SurveyPanel, TUTORIAL } from './src/ui/Overlays';
 import { Settings, SettingsPage, SettingsScreen } from './src/ui/SettingsScreen';
+import { StreakPanel, StreakWeek } from './src/ui/StreakCalendar';
 import { FLAG_COLORS, Palette, RARITY_COLORS, usePalette } from './src/ui/theme';
 import { AgeGroup, WelcomeGate } from './src/ui/WelcomeGate';
 
@@ -556,50 +557,6 @@ function Game() {
     );
   }
 
-  /** Atlas Earth-style login calendar: the current week of the 90-day cycle and the next big bonuses. */
-  function StreakCalendar({ compact }: { compact?: boolean }) {
-    const cur = ((streak.next - 1) % R.STREAK_CYCLE) + 1; // cycle day of the next collection
-    const start = Math.floor((cur - 1) / 7) * 7 + 1;
-    const days = Array.from({ length: Math.min(7, R.STREAK_CYCLE - start + 1) }, (_, i) => start + i);
-    const upcoming = Object.keys(R.STREAK_MILESTONES).map(Number).filter(d => d >= cur).slice(0, 3);
-    return (
-      <View style={{ gap: 8 }}>
-        {!compact && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <FlameIcon size={18} color="#e2694f" />
-            <T c={c} style={{ fontWeight: '700', flex: 1 }}>Bonus de connexion · série de {plural(streak.count, 'jour')}</T>
-          </View>
-        )}
-        <View style={{ flexDirection: 'row', gap: 4 }}>
-          {days.map(d => {
-            const done = d < cur;
-            const today = d === cur && streak.canClaim;
-            const big = !!R.STREAK_MILESTONES[d];
-            return (
-              <View key={d} style={{ flex: 1, alignItems: 'center', paddingVertical: 5, borderRadius: 10, gap: 1,
-                backgroundColor: done ? c.accent : c.panel, borderWidth: 2, borderColor: today ? c.accentDeep : big ? c.epic : 'transparent' }}>
-                <T c={c} style={{ fontSize: 10, fontWeight: '700', color: done ? c.accentInk : c.muted }}>J{d}</T>
-                {big ? <GiftIcon size={16} color={done ? c.accentInk : c.epic} /> : <PearlIcon size={14} />}
-                <T c={c} num style={{ fontSize: 11, color: done ? c.accentInk : c.ink }}>+{R.streakReward(d)}</T>
-              </View>
-            );
-          })}
-        </View>
-        {upcoming.length > 0 && (
-          <T c={c} muted style={{ fontSize: 12 }}>Gros bonus à venir : {upcoming.map(d => `jour ${d} · ${R.STREAK_MILESTONES[d]} perles`).join(', ')}.</T>
-        )}
-        <T c={c} muted style={{ fontSize: 12 }}>
-          {streak.broken ? 'Série interrompue : elle repart au jour 1. ' : ''}Un jour manqué et la série repart au jour 1. Cycle de {R.STREAK_CYCLE} jours.
-        </T>
-        {!compact && (streak.locked
-          ? <T c={c} style={{ fontSize: 13, fontWeight: '700' }}>Débloqué avec {R.STREAK_MIN_TILES} îlots ({count}/{R.STREAK_MIN_TILES})</T>
-          : streak.canClaim
-            ? <Btn c={c} small icon={<PearlIcon size={16} />} label={`Récupérer · jour ${streak.next} · +${plural(streak.reward, 'perle')}`} onPress={() => setOverlay({ type: 'streak' })} />
-            : <T c={c} style={{ fontSize: 13, fontWeight: '700', color: c.good }}>Bonus du jour récupéré ✓ Revenez demain.</T>)}
-      </View>
-    );
-  }
-
   function QuestsTab() {
     const weekLeft = R.WEEK - (now % R.WEEK);
     return (
@@ -615,7 +572,7 @@ function Game() {
           </View>
         </View>
         <Card c={c} style={{ gap: 10 }} highlight={streak.canClaim ? c.accent : undefined}>
-          <StreakCalendar />
+          <StreakWeek c={c} info={streak} pass={pass} onOpen={() => setOverlay({ type: 'streak' })} />
         </Card>
         {s!.quests.items.map(q => {
           const def = R.QUESTS[q.id];
@@ -820,21 +777,14 @@ function Game() {
           onClose={() => setOverlay(overlay.next ?? null)} />
       );
       case 'streak': return (
-        <MessageCard c={c} title="Bonus de connexion" body={streak.canClaim
-            ? `Jour ${streak.next} de votre série. Récupérez votre bonus chaque jour : les gros bonus tombent aux jours 7, 14, 30, 60 et 90.`
-            : streak.locked ? `Le calendrier se débloque avec ${R.STREAK_MIN_TILES} îlots.` : 'Bonus du jour récupéré. Revenez demain pour continuer la série.'}
-          icon={<View style={[st.bigDisc, { backgroundColor: '#e2694f' }]}><FlameIcon size={34} color="#fff" /></View>}
-          action={streak.canClaim ? `Récupérer +${plural(streak.reward, 'perle')}` : 'Fermer'}
-          onCancel={streak.canClaim ? () => setOverlay(overlay.next ?? null) : undefined}
-          onClose={async () => {
-            if (streak.canClaim) {
-              const res = await act(() => backend.claimStreak());
-              if (res) { setS(res.s); reward(`+${res.reward}`, 'pearl'); }
-            }
+        <StreakPanel c={c} info={streak} pass={pass}
+          onPass={() => setOverlay({ type: 'pass' })}
+          onClose={() => setOverlay(overlay.next ?? null)}
+          onClaim={async () => {
+            const res = await act(() => backend.claimStreak());
+            if (res) { setS(res.s); reward(`+${res.reward}`, 'pearl'); }
             setOverlay(overlay.next ?? null);
-          }}>
-          <StreakCalendar compact />
-        </MessageCard>
+          }} />
       );
       case 'settings': return (
         <SettingsScreen c={c} page={overlay.page} settings={settings} onChange={changeSetting} account={backend.account()} online={backend.mode === 'online'}

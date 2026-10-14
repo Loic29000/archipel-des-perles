@@ -1,5 +1,5 @@
 -- Pass Capitaine: monthly pass modelled on Atlas Earth's Explorer Club. Mirrors PASS in src/game/rules.ts.
--- Perks: 8 h boost reserve (instead of 6), +2 pearls on each daily login bonus,
+-- Perks: 8 h boost reserve (instead of 6), the pass line of the login calendar (free reward again + 1),
 -- mini-games every 40 min (instead of 1 h), badge next to the name in the ranking.
 
 alter table profiles add column if not exists pass_until bigint not null default 0;
@@ -83,7 +83,9 @@ begin
   return get_state();
 end $$;
 
--- Login bonus: +2 pearls with the pass.
+-- Pass line of the login calendar: the free reward again, plus 1.
+create or replace function pass_streak_reward(n int) returns int language sql immutable as $$ select streak_reward(n) + 1 $$;
+
 create or replace function claim_streak() returns jsonb language plpgsql security definer set search_path = public as $$
 declare uid uuid := g_uid(); t bigint := g_now(); d int := (t / g_day())::int; p profiles; c int; reward int;
 begin
@@ -92,7 +94,7 @@ begin
   if (select count(*) from tiles where owner = uid) < 3 then raise exception 'Possédez 3 îlots pour débloquer le bonus de connexion.'; end if;
   if p.streak_day = d then raise exception 'Bonus du jour déjà récupéré. Revenez demain !'; end if;
   c := case when p.streak_day = d - 1 then p.streak_count + 1 else 1 end;
-  reward := streak_reward(c) + case when t < p.pass_until then 2 else 0 end;
+  reward := streak_reward(c) + case when t < p.pass_until then pass_streak_reward(c) else 0 end;
   update profiles set streak_count = c, streak_day = d, pearls = pearls + reward where id = uid;
   return get_state() || jsonb_build_object('reward', reward);
 end $$;
@@ -106,5 +108,5 @@ language sql stable security definer set search_path = public as $$
   group by p.id order by count(t.*) desc, p.coins desc limit 50
 $$;
 
-revoke all on function leaderboard() from public, anon;
+revoke all on function leaderboard(), pass_streak_reward(int) from public, anon;
 grant execute on function leaderboard() to authenticated;

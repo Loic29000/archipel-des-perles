@@ -76,7 +76,7 @@ Tous les chiffres sont en tête de `src/game/rules.ts` et dupliqués dans la mig
 - **Décorations** (`DECOS`) : achetées en doublons, visibles sur la carte. La tortue se débloque en attrapant une créature.
 - **Récap au retour** : à l'ouverture, le jeu affiche ce que les îlots ont rapporté pendant l'absence.
 - **Achats intégrés** (`PRODUCTS`) : packs de perles, **en mode test** (aucun paiement).
-- **Pass Capitaine** (`PASS`), abonnement mensuel inspiré de l'Atlas Explorer Club : réserve de boost de 8 h, +2 perles sur le bonus de connexion, mini-jeux toutes les 40 min, badge boussole. En mode test, chaque achat ajoute 30 jours.
+- **Pass Capitaine** (`PASS`), abonnement mensuel inspiré de l'Atlas Explorer Club : réserve de boost de 8 h, ligne Pass du calendrier de connexion (bonus doublé +1 perle, visible mais verrouillée sans abonnement), mini-jeux toutes les 40 min, badge boussole. En mode test, chaque achat ajoute 30 jours.
   Côté serveur, `test_purchase` ne marche que si `app_config.iap_test` vaut `true`.
   Pour passer en réel : créer les produits sur App Store Connect et Google Play Console, ajouter une bibliothèque d'achats (par exemple `expo-iap`), vérifier chaque reçu dans une fonction serveur qui appelle `g_grant_purchase`, puis passer `iap_test` à `false`.
 

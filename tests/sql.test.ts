@@ -3,7 +3,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'fs';
 import { biomeAt } from '../src/game/world';
-import { ACHIEVEMENTS, DAY, eventAt, HOUR, questsFor, streakReward } from '../src/game/rules';
+import { ACHIEVEMENTS, DAY, eventAt, HOUR, passStreakReward, questsFor, streakReward } from '../src/game/rules';
 const db = new PGlite();
 const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as any[];
 (async () => {
@@ -34,7 +34,8 @@ const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as
   for (const a of ACHIEVEMENTS) { const [row] = await q('select ach_reward($1) r', [a.id]); if (row.r !== a.reward) achBad++; }
   console.log('achievement reward mismatches', achBad, 'of', ACHIEVEMENTS.length);
   let stBad = 0;
-  for (let n = 1; n <= 200; n++) { const [row] = await q('select streak_reward($1) r', [n]); if (row.r !== streakReward(n)) stBad++; }
+  for (let n = 1; n <= 200; n++) { const [row] = await q('select streak_reward($1) r', [n]); if (row.r !== streakReward(n)) stBad++;
+    const [pr] = await q('select pass_streak_reward($1) r', [n]); if (pr.r !== passStreakReward(n)) stBad++; }
   console.log('streak reward mismatches', stBad);
   const u1 = '11111111-1111-1111-1111-111111111111', u2 = '22222222-2222-2222-2222-222222222222';
   await q('insert into auth.users values ($1),($2)', [u1, u2]);
@@ -94,7 +95,7 @@ const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as
     console.log('pass boost over 6 h', b.j ? Math.round((b.j.s.boostUntil - now) / 60000) + ' min' : b.error);
     const g = await as(u1, "select start_game('fish') j");
     console.log('pass fish cooldown', Math.round((g.j.s.cd.fish - now) / 60000), 'min');
-    const k = await as(u1, 'select claim_streak() j'); console.log('pass login', k.j?.s.streak.count, 'reward', k.j?.reward, '(want 2, 3)');
+    const k = await as(u1, 'select claim_streak() j'); console.log('pass login', k.j?.s.streak.count, 'reward', k.j?.reward, '(want 2, 1 + 2)');
     console.log('pass in ranking', (await as(u1, 'select * from leaderboard() where me')).pass);
     await db.exec(`update profiles set boost_until = g_now() + 6.5 * 3600000, pass_until = 0 where id='${u1}'`);
     console.log('no pass boost over 6 h', (await as(u1, "select ad_reward('boost') j")).error); }

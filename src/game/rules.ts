@@ -29,6 +29,8 @@ export const STREAK_CYCLE = 90;
 export const STREAK_MILESTONES: Record<number, number> = { 7: 5, 14: 10, 21: 10, 30: 25, 45: 25, 60: 50, 75: 50, 90: 200 };
 /** Pearls for the n-th consecutive day (n starts at 1). */
 export const streakReward = (n: number) => STREAK_MILESTONES[((n - 1) % STREAK_CYCLE) + 1] ?? 1;
+/** Extra pearls on the Pass Capitaine line of the calendar: the free reward again, plus 1. */
+export const passStreakReward = (n: number) => streakReward(n) + 1;
 // Shop prices in doublons.
 export const PEARL_PRICE = 0.0001;
 export const UPGRADE_PRICE = (level: number) => 0.0005 * (level + 1);
@@ -85,11 +87,11 @@ export type ProductId = PackId | typeof PASS.id;
 // more mini-game plays (Atlas: more daily spins) and a badge next to the name.
 export const PASS = {
   id: 'pass_capitaine', name: 'Pass Capitaine', price: '4,99 €', cents: 499, days: 30,
-  maxBoost: 8 * HOUR, loginBonus: 2, gameCooldown: 40 * MIN,
+  maxBoost: 8 * HOUR, gameCooldown: 40 * MIN,
 } as const;
 export const PASS_PERKS = [
   'Réserve de boost de 8 h au lieu de 6 h',
-  `+${PASS.loginBonus} perles sur chaque bonus de connexion`,
+  'Ligne Pass du calendrier de connexion : chaque bonus doublé, +1 perle (201 perles en plus au 90e jour)',
   'Mini-jeux toutes les 40 min au lieu de 1 h',
   'Badge boussole à côté de votre nom',
 ];
@@ -284,7 +286,7 @@ export function streakInfo(s: GameState, now: number) {
   const claimed = s.streak.lastDay === day;
   const locked = tileCount(s) < STREAK_MIN_TILES;
   const next = count + 1; // day number of the next collection (today if not yet collected, else tomorrow)
-  return { count, claimed, locked, canClaim: !claimed && !locked, next, reward: streakReward(next) + (hasPass(s, now) ? PASS.loginBonus : 0), broken: !alive && s.streak.count > 0 };
+  return { count, claimed, locked, canClaim: !claimed && !locked, next, reward: streakReward(next) + (hasPass(s, now) ? passStreakReward(next) : 0), broken: !alive && s.streak.count > 0 };
 }
 
 export function claimStreak(s0: GameState, now: number): { s: GameState; reward: number } {
@@ -294,7 +296,7 @@ export function claimStreak(s0: GameState, now: number): { s: GameState; reward:
   const s = clone(s0);
   s.streak.count = s.streak.lastDay === day - 1 ? s.streak.count + 1 : 1;
   s.streak.lastDay = day;
-  const reward = streakReward(s.streak.count) + (hasPass(s, now) ? PASS.loginBonus : 0);
+  const reward = streakReward(s.streak.count) + (hasPass(s, now) ? passStreakReward(s.streak.count) : 0);
   s.pearls += reward;
   return { s, reward };
 }

@@ -187,3 +187,11 @@ export function CompassIcon({ size = 18, color = '#000' }: P) {
     </Svg>
   );
 }
+export function LockIcon({ size = 14, color = '#000' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5" {...stroke(color)} />
+      <Rect x="5" y="10.5" width="14" height="10" rx="2.5" fill={color} />
+    </Svg>
+  );
+}
