@@ -61,6 +61,19 @@ export function Card({ c, children, style, highlight }: { c: Palette; children: 
   );
 }
 
+/** A tickable line, for explicit agreements (terms, purchase conditions). The label may contain links. */
+export function Check({ c, value, onChange, children }: { c: Palette; value: boolean; onChange: (v: boolean) => void; children: React.ReactNode }) {
+  return (
+    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: value }} onPress={() => { play('tap'); onChange(!value); }}
+      style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+      <View style={{ width: 22, height: 22, borderRadius: 7, borderWidth: 2, borderColor: value ? c.own : c.muted, backgroundColor: value ? c.own : 'transparent', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
+        {value && <Text style={[{ color: '#fff', fontSize: 13, lineHeight: 15 }, fontFor('body', '700')]}>✓</Text>}
+      </View>
+      <View style={{ flex: 1 }}>{children}</View>
+    </Pressable>
+  );
+}
+
 /** Small round counter shown on a tab or button. */
 export function Badge({ c, n }: { c: Palette; n: number | true }) {
   return (

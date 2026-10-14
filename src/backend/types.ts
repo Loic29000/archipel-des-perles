@@ -30,6 +30,8 @@ export interface Backend {
   claimAchievement(id: string): Promise<GameState>;
   /** Credits a purchase. Only test purchases for now: real ones need store receipts checked by the server. */
   purchase(id: ProductId): Promise<GameState>;
+  /** Everything stored about the player, for the GDPR right of access and portability. */
+  exportData(): Promise<unknown>;
   /** Erases the player's game (and online account), then starts a fresh one. */
   resetAll(): Promise<GameState>;
   demo?: { enabled(): boolean; toggle(): Promise<GameState>; gift(): Promise<GameState> };

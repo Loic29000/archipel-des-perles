@@ -40,7 +40,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "export:web": "expo export --platform web",
-    "test:sql": "tsx tests/sql.test.ts"
+    "test:sql": "tsx tests/sql.test.ts",
+    "legal": "tsx scripts/build-legal.ts"
   },
   "private": true
 }

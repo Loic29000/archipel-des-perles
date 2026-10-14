@@ -6,6 +6,7 @@
   "exclude": [
     "supabase/functions",
     "tests",
+    "scripts",
     "node_modules"
   ]
 }

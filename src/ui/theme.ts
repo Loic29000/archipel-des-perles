@@ -37,21 +37,18 @@ export function usePalette(mode: ThemeMode = 'auto'): Palette {
   return (mode === 'auto' ? system === 'dark' : mode === 'dark') ? dark : light;
 }
 
-// Web loads the families from Google Fonts and picks the weight with fontWeight.
-// Native registers one family per weight (see services/fonts), so the weight is part of the name.
+// The fonts ship inside the app (see services/fonts), on the web too, so no font request leaves for a third-party CDN.
+// Each weight is registered as its own family, so the weight is part of the name.
 type Weight = TextStyle['fontWeight'];
 const heavy = (w: Weight) => w === 'bold' || Number(w) >= 700;
+const web = Platform.OS === 'web';
 export function fontFor(kind: 'display' | 'body' | 'num', weight: Weight): TextStyle {
-  if (Platform.OS === 'web') {
-    const family = kind === 'display' ? '"Unbounded", "Arial Black", system-ui, sans-serif'
-      : kind === 'num' ? '"JetBrains Mono", ui-monospace, Menlo, monospace'
-      : '"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif';
-    return { fontFamily: family };
-  }
-  if (kind === 'num') return { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' };
-  if (kind === 'display') return { fontFamily: heavy(weight) || weight === undefined ? 'Unbounded_700Bold' : 'Unbounded_500Medium', fontWeight: 'normal' };
-  const family = heavy(weight) ? 'Figtree_700Bold' : weight === '600' || weight === '500' ? 'Figtree_600SemiBold' : 'Figtree_400Regular';
-  return { fontFamily: family, fontWeight: 'normal' };
+  if (kind === 'num') return { fontFamily: web ? 'ui-monospace, Menlo, Consolas, monospace' : Platform.OS === 'ios' ? 'Menlo' : 'monospace' };
+  const family = kind === 'display'
+    ? heavy(weight) || weight === undefined ? 'Unbounded_700Bold' : 'Unbounded_500Medium'
+    : heavy(weight) ? 'Figtree_700Bold' : weight === '600' || weight === '500' ? 'Figtree_600SemiBold' : 'Figtree_400Regular';
+  const fallback = kind === 'display' ? ', "Arial Black", system-ui, sans-serif' : ', system-ui, -apple-system, "Segoe UI", sans-serif';
+  return { fontFamily: web ? family + fallback : family, fontWeight: 'normal' };
 }
 
 export const fonts = {

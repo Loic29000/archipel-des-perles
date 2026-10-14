@@ -76,6 +76,11 @@ export function createLocalBackend(): Backend {
     async linkEmail() {
       throw new R.GameError('Les comptes demandent une connexion au serveur du jeu.');
     },
+    async exportData() {
+      await persist();
+      const [main, demoSave] = await Promise.all([loadJSON<Save>('archipel:v1'), loadJSON<Save>('archipel:v1:demo')]);
+      return { exported_at: new Date().toISOString(), storage: 'Cet appareil uniquement', game: main?.s ?? null, demo_game: demoSave?.s ?? null };
+    },
     async resetAll() {
       await removeKey(slot());
       return load();

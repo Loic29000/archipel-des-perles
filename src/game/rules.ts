@@ -68,12 +68,21 @@ export const ACHIEVEMENTS: { id: string; name: string; desc: string; reward: num
 
 // In-app purchases (store prices are shown for information; the store sets the real ones).
 export const PRODUCTS = [
-  { id: 'perles_100', name: '100 perles', pearls: 100, price: '0,99 €' },
-  { id: 'perles_550', name: '550 perles', pearls: 550, price: '4,99 €' },
-  { id: 'perles_1200', name: '1 200 perles', pearls: 1200, price: '9,99 €' },
-  { id: 'sans_pubs', name: 'Sans pubs', pearls: 0, price: '3,99 €' },
+  { id: 'perles_100', name: '100 perles', pearls: 100, price: '0,99 €', cents: 99 },
+  { id: 'perles_550', name: '550 perles', pearls: 550, price: '4,99 €', cents: 499 },
+  { id: 'perles_1200', name: '1 200 perles', pearls: 1200, price: '9,99 €', cents: 999 },
 ] as const;
 export type ProductId = (typeof PRODUCTS)[number]['id'];
+
+const euro = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+/** EU consumer rules on virtual currencies: show what an amount of pearls costs in real money, from the cheapest to the dearest pack. */
+export function pearlsInEuros(n: number): string {
+  const per = PRODUCTS.map(p => p.cents / 100 / p.pearls);
+  const lo = euro(n * Math.min(...per)), hi = euro(n * Math.max(...per));
+  return lo === hi ? lo : `${lo.replace(' €', '')} à ${hi}`;
+}
+/** Price of 100 pearls inside a given pack. */
+export const per100 = (p: (typeof PRODUCTS)[number]) => euro(p.cents / p.pearls);
 
 export type QuestId = 'ad' | 'claim' | 'game' | 'survey' | 'boost';
 export const QUESTS: Record<QuestId, { label: string; target: number; reward: number }> = {
@@ -107,7 +116,6 @@ export interface GameState {
   referralUsed: boolean;
   achClaimed: string[];
   caught: number;
-  noAds: boolean;
 }
 
 export class GameError extends Error {}
@@ -118,7 +126,7 @@ export function newState(now: number): GameState {
     cd: { ad: 0, survey: 0, fish: 0, memo: 0, event: 0 }, pendingGame: null,
     streak: { count: 0, lastDay: -1 }, quests: { day: -1, items: [] },
     flags: ['lagon'], flag: 'lagon', username: 'Navigateur', referralCode: '', referralUsed: false,
-    achClaimed: [], caught: 0, noAds: false,
+    achClaimed: [], caught: 0,
   };
 }
 
@@ -411,6 +419,5 @@ export function grantPurchase(s0: GameState, id: ProductId): GameState {
   if (!p) throw new GameError('Produit inconnu.');
   const s = clone(s0);
   s.pearls += p.pearls;
-  if (id === 'sans_pubs') s.noAds = true;
   return s;
 }

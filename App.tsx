@@ -7,10 +7,12 @@ import { Backend, createBackend } from './src/backend';
 import type { LeaderRow, WorldTile } from './src/backend/types';
 import * as R from './src/game/rules';
 import { biomeAt, BIOMES, key, neighborsOf, parseKey } from './src/game/world';
-import { adsSimulated, showRewardedAd } from './src/services/ads';
+import { TERMS_VERSION } from './src/legal/texts';
+import { adChoicesAvailable, adsSimulated, initAds, showAdChoices, showRewardedAd } from './src/services/ads';
 import { buzz, play, setHapticsOn, setSoundOn } from './src/services/feedback';
 import { useGameFonts } from './src/services/fonts';
 import { enableNotifications, Reminder, scheduleReminders } from './src/services/notify';
+import { saveJsonFile } from './src/services/share';
 import { loadJSON, saveJSON } from './src/services/storage';
 import { PopItem, Pops } from './src/ui/fx';
 import { HexMap } from './src/ui/HexMap';
@@ -19,10 +21,11 @@ import {
   MoreIcon, PearlIcon, ScrollIcon, ShellIcon, ShopIcon, TrophyIcon, TvIcon, UserIcon,
 } from './src/ui/icons';
 import { CreatureArt, DecoArt, Island, IslandBase, tileHash } from './src/ui/island';
-import { Badge, Btn, Card, CodeField, NameField, Progress, styles as k, T } from './src/ui/kit';
+import { Badge, Btn, Card, Check, CodeField, NameField, Progress, styles as k, T } from './src/ui/kit';
 import { AdOverlay, FishingLayer, MemoryPanel, MessageCard, RevealCard, SurveyPanel, TUTORIAL } from './src/ui/Overlays';
 import { Settings, SettingsPage, SettingsScreen } from './src/ui/SettingsScreen';
 import { FLAG_COLORS, Palette, RARITY_COLORS, usePalette } from './src/ui/theme';
+import { AgeGroup, WelcomeGate } from './src/ui/WelcomeGate';
 
 type Tab = 'tile' | 'earn' | 'boost' | 'quests' | 'more';
 type More = 'shop' | 'ranking' | 'log' | 'profile';
@@ -37,7 +40,7 @@ type Overlay =
   | { type: 'tutorial'; step: number; next?: Overlay | null }
   | { type: 'settings'; page: SettingsPage }
   | { type: 'recap'; away: number; gain: number; next?: Overlay | null }
-  | { type: 'buy'; product: R.ProductId };
+  | { type: 'buy'; product: R.ProductId; waiver?: boolean; parent?: boolean };
 
 const fmtInt = (n: number) => Math.floor(n).toLocaleString('fr-FR');
 const fmtCoins = (n: number) => {
@@ -60,7 +63,7 @@ export default function App() {
   );
 }
 
-const DEFAULT_SETTINGS: Settings = { sound: true, haptics: true, notifications: false, tutorialDone: false, theme: 'auto' };
+const DEFAULT_SETTINGS: Settings = { sound: true, haptics: true, notifications: false, tutorialDone: false, theme: 'auto', ageGroup: null, terms: 0 };
 
 function Game() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -82,6 +85,9 @@ function Game() {
   const [hudH, setHudH] = useState(0);
   const [sheetH, setSheetH] = useState(0);
   const [demo, setDemo] = useState(false);
+  // first launch (or new terms): the age screen and terms come before anything is created or sent
+  const [gate, setGate] = useState(false);
+  const [adChoices, setAdChoices] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const popId = useRef(0);
   const seenKey = () => `archipel:seen:${backend.mode}${backend.demo?.enabled() ? ':demo' : ''}`;
@@ -117,6 +123,21 @@ function Game() {
       setSettings(saved);
       setSoundOn(saved.sound);
       setHapticsOn(saved.haptics);
+      if (!saved.ageGroup || saved.terms < TERMS_VERSION) setGate(true);
+      else start(saved);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function accept(age: AgeGroup) {
+    const next = { ...settings, ageGroup: age, terms: TERMS_VERSION };
+    updateSettings({ ageGroup: age, terms: TERMS_VERSION });
+    setGate(false);
+    start(next);
+  }
+
+  async function start(saved: Settings) {
+      initAds(saved.ageGroup === 'minor').then(() => adChoicesAvailable()).then(setAdChoices);
       try {
         let st = await backend.init();
         setDemo(!!backend.demo?.enabled());
@@ -138,9 +159,7 @@ function Game() {
       } catch (e) {
         setFatal(e instanceof Error ? e.message : String(e));
       }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }
 
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 250);
@@ -215,6 +234,7 @@ function Game() {
       </SafeAreaView>
     );
   }
+  if (gate && fontsReady) return <WelcomeGate c={c} ageGroup={settings.ageGroup} onDone={accept} />;
   if (!s || !fontsReady) return <View style={[st.root, { backgroundColor: c.seaDeep }]} />;
 
   // ---------------------------------------------------------------- derived values for this frame
@@ -228,6 +248,7 @@ function Game() {
   const selKey = selected ? key(selected[0], selected[1]) : null;
   const busy = !!overlay;
   const ready = (t: number) => now >= t;
+  const minor = settings.ageGroup !== 'adult';
   const ev = R.eventAt(now);
   const creatureKind = ev ? ev.creature : null;
   const creature = creatureKind && count > 0 && ready(s.cd.event) ? creatureSpot(s, Math.floor(now / R.HOUR), creatureKind) : null;
@@ -251,9 +272,7 @@ function Game() {
         }
       }
     };
-    if (s!.noAds) {
-      grant();
-    } else if (adsSimulated) {
+    if (adsSimulated) {
       setOverlay({ type: 'ad', label, then: () => { setOverlay(null); grant(); } });
     } else {
       showRewardedAd(kind, backend.account().userId).then(ok => (ok ? grant() : say('Publicité interrompue, aucune récompense.')));
@@ -413,6 +432,7 @@ function Game() {
         <Btn c={c} icon={price ? <PearlIcon size={18} /> : <GiftIcon size={18} color={c.accentInk} />}
           label={!claimable ? 'Hors de portée' : !price ? 'Acquérir gratuitement' : short ? `Encore ${short} perles` : `Acquérir · ${price} perles`}
           disabled={!claimable || short > 0 || busy} onPress={claimSelected} />
+        {price > 0 && <T c={c} muted style={{ fontSize: 11, textAlign: 'center' }}>{price} perles = {R.pearlsInEuros(price)} si achetées · gratuites en jouant</T>}
         {claimable && short > 0 && (
           <Pressable onPress={() => setTab('earn')}><T c={c} style={{ color: c.own, fontWeight: '700', fontSize: 13, textAlign: 'center' }}>Gagner des perles →</T></Pressable>
         )}
@@ -599,18 +619,15 @@ function Game() {
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {R.PRODUCTS.map(p => {
-            const owned = p.id === 'sans_pubs' && s!.noAds;
             return (
-              <Pressable key={p.id} accessibilityRole="button" disabled={owned || busy} onPress={() => { play('tap'); setOverlay({ type: 'buy', product: p.id }); }}
+              <Pressable key={p.id} accessibilityRole="button" disabled={busy} onPress={() => { play('tap'); setOverlay({ type: 'buy', product: p.id }); }}
                 style={{ width: '48.5%', padding: 10, borderRadius: 14, backgroundColor: c.card, borderWidth: 2, borderColor: p.id === 'perles_550' ? c.accent : 'transparent', gap: 4, alignItems: 'center' }}>
                 {p.id === 'perles_550' && <View style={[st.tag, { backgroundColor: c.accent, position: 'absolute', top: -9 }]}><T c={c} style={{ fontSize: 9, fontWeight: '700', color: c.accentInk }}>MEILLEURE OFFRE</T></View>}
-                {p.id === 'sans_pubs'
-                  ? <View style={[st.disc, { backgroundColor: c.bad }]}><TvIcon size={20} color="#fff" /></View>
-                  : <View style={{ flexDirection: 'row' }}>{Array.from({ length: p.id === 'perles_100' ? 1 : p.id === 'perles_550' ? 2 : 3 }, (_, i) => <View key={i} style={{ marginLeft: i ? -8 : 0 }}><PearlIcon size={30} /></View>)}</View>}
+                <View style={{ flexDirection: 'row' }}>{Array.from({ length: p.id === 'perles_100' ? 1 : p.id === 'perles_550' ? 2 : 3 }, (_, i) => <View key={i} style={{ marginLeft: i ? -8 : 0 }}><PearlIcon size={30} /></View>)}</View>
                 <T c={c} style={{ fontWeight: '700' }}>{p.name}</T>
-                <T c={c} muted style={{ fontSize: 11, textAlign: 'center' }}>{p.id === 'sans_pubs' ? 'Récompenses sans regarder de pub' : 'Pour acheter des îlots'}</T>
-                <View style={[st.tag, { backgroundColor: owned ? c.good : c.accent, paddingHorizontal: 12, paddingVertical: 5 }]}>
-                  <T c={c} style={{ fontWeight: '700', fontSize: 12, color: owned ? '#fff' : c.accentInk }}>{owned ? 'Activé ✓' : p.price}</T>
+                <T c={c} muted style={{ fontSize: 11, textAlign: 'center' }}>{R.per100(p)} les 100 perles</T>
+                <View style={[st.tag, { backgroundColor: c.accent, paddingHorizontal: 12, paddingVertical: 5 }]}>
+                  <T c={c} style={{ fontWeight: '700', fontSize: 12, color: c.accentInk }}>{p.price}</T>
                 </View>
               </Pressable>
             );
@@ -772,7 +789,18 @@ function Game() {
             setS(st2); setOthers(new Map()); setSelected(st2.spawn); setFocus({ at: st2.spawn, nonce: Date.now() }); setTab('tile');
             setOverlay(null); say('Nouvelle partie : votre premier îlot vous attend.');
           }}
-          onClose={() => setOverlay(null)} />
+          onClose={() => setOverlay(null)}
+          privacy={{
+            adChoices,
+            onAdChoices: () => { showAdChoices().catch(() => say('Choix publicitaires indisponibles pour le moment.')); },
+            onExport: async () => {
+              const data = await act(() => backend.exportData());
+              if (data === null) return;
+              const { ageGroup, terms } = settings;
+              await saveJsonFile('archipel-des-perles-mes-donnees.json', { ...(data as object), device_settings: { ageGroup, terms_version: terms } });
+              say('Vos données sont prêtes.');
+            },
+          }} />
       );
       case 'recap': return (
         <MessageCard c={c} title={`Bon retour, ${s!.username} !`} action="Continuer"
@@ -789,15 +817,24 @@ function Game() {
         const p = R.PRODUCTS.find(x => x.id === overlay.product)!;
         return (
           <MessageCard c={c} title={`${p.name} · ${p.price}`} action="Confirmer l’achat test" onCancel={() => setOverlay(null)}
-            body="Mode test : aucun paiement n’est demandé. Dans l’application publiée, le paiement passera par l’App Store ou Google Play."
-            icon={p.id === 'sans_pubs' ? <View style={[st.bigDisc, { backgroundColor: c.bad }]}><TvIcon size={30} color="#fff" /></View> : <PearlIcon size={56} />}
+            body={`Prix TTC, soit ${R.per100(p)} les 100 perles. Mode test : aucun paiement n’est demandé. Dans l’application publiée, le paiement passera par l’App Store ou Google Play.`}
+            icon={<PearlIcon size={56} />} disabled={!overlay.waiver || (minor && !overlay.parent)}
             onClose={async () => {
               setOverlay(null);
               const st2 = await act(() => backend.purchase(p.id));
               if (!st2) return;
               setS(st2);
-              if (p.pearls) reward(`+${p.pearls}`, 'pearl'); else { play('legend'); say('Sans pubs activé : les récompenses arrivent sans publicité.'); }
-            }} />
+              reward(`+${p.pearls}`, 'pearl');
+            }}>
+            <Check c={c} value={!!overlay.waiver} onChange={v => setOverlay({ ...overlay, waiver: v })}>
+              <T c={c} style={{ fontSize: 13, lineHeight: 18 }}>Je demande la livraison immédiate des perles et je renonce à mon droit de rétractation de 14 jours.</T>
+            </Check>
+            {minor && (
+              <Check c={c} value={!!overlay.parent} onChange={v => setOverlay({ ...overlay, parent: v })}>
+                <T c={c} style={{ fontSize: 13, lineHeight: 18 }}>Un parent ou tuteur est d’accord pour cet achat.</T>
+              </Check>
+            )}
+          </MessageCard>
         );
       }
       case 'tutorial': {

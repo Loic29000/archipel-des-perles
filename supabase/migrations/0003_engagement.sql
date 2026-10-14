@@ -4,7 +4,6 @@
 alter table profiles add column if not exists ach_claimed text[] not null default '{}';
 alter table profiles add column if not exists caught integer not null default 0;
 alter table profiles add column if not exists cd_event bigint not null default 0;
-alter table profiles add column if not exists no_ads boolean not null default false;
 alter table tiles add column if not exists deco text;
 -- true until the stores are set up: lets the app credit purchases without a receipt
 alter table app_config add column if not exists iap_test boolean not null default true;
@@ -102,7 +101,6 @@ begin
     when 'perles_100' then update profiles set pearls = pearls + 100 where id = uid;
     when 'perles_550' then update profiles set pearls = pearls + 550 where id = uid;
     when 'perles_1200' then update profiles set pearls = pearls + 1200 where id = uid;
-    when 'sans_pubs' then update profiles set no_ads = true where id = uid;
     else raise exception 'Produit inconnu.';
   end case;
 end $$;
@@ -137,7 +135,7 @@ begin
       'quests', jsonb_build_object('day', p.quest_day, 'items', p.quests),
       'flags', to_jsonb(p.flags), 'flag', p.flag, 'username', p.username,
       'referralCode', p.referral_code, 'referralUsed', p.referred_by is not null,
-      'achClaimed', to_jsonb(p.ach_claimed), 'caught', p.caught, 'noAds', p.no_ads));
+      'achClaimed', to_jsonb(p.ach_claimed), 'caught', p.caught));
 end $$;
 
 -- Golden tide event doubles the epic and legendary odds.
@@ -169,12 +167,12 @@ begin
   return get_state() || jsonb_build_object('tile', jsonb_build_object('rar', rr, 'level', 0, 'biome', biome_at(tq, tr)));
 end $$;
 
--- Whale event: 2 h of boost per ad. "Sans pubs" players get the reward without an AdMob check.
+-- Whale event: 2 h of boost per ad.
 create or replace function ad_reward(kind text) returns jsonb language plpgsql security definer set search_path = public as $$
 declare uid uuid := g_uid(); t bigint := g_now(); p profiles; ev bigint;
 begin
   if kind not in ('pearl','boost','game') then raise exception 'Type de pub inconnu.'; end if;
-  if (select require_ssv from app_config) and not (select no_ads from profiles where id = uid) then
+  if (select require_ssv from app_config) then
     select id into ev from ad_events where user_id = uid and ad_events.kind = ad_reward.kind and consumed_at is null
       and created_at > now() - interval '10 minutes' order by id limit 1 for update;
     if ev is null then raise exception 'Pub non validée par la régie, réessayez dans un instant.'; end if;

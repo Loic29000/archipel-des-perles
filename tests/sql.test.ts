@@ -10,7 +10,7 @@ const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as
   await db.exec(`create role anon; create role authenticated; create schema auth;
     create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true),'')::uuid $$;`);
-  for (const m of ['0001_init.sql', '0002_delete_account.sql', '0003_engagement.sql']) await db.exec(readFileSync(new URL(`../supabase/migrations/${m}`, import.meta.url), 'utf8'));
+  for (const m of ['0001_init.sql', '0002_delete_account.sql', '0003_engagement.sql', '0004_privacy.sql']) await db.exec(readFileSync(new URL(`../supabase/migrations/${m}`, import.meta.url), 'utf8'));
   // world parity
   let bad = 0;
   for (let a = -30; a <= 30; a += 3) for (let b = -30; b <= 30; b += 3) {
@@ -67,15 +67,22 @@ const q = async (sql: string, p: any[] = []) => (await db.query(sql, p)).rows as
   await db.exec(`update profiles set coins = 0.01 where id='${u1}'`);
   { const d = await as(u1, 'select decorate_tile($1,$2,$3) j', [sp[0], sp[1], 'bateau']); console.log('decorate', d.j ? d.j.s.tiles[`${sp[0]},${sp[1]}`].deco : d.error); }
   { const d = await as(u1, 'select decorate_tile($1,$2,$3) j', [sp[0], sp[1], 'tortue']); console.log('turtle locked', d.error); }
-  { const p = await as(u1, "select test_purchase('sans_pubs') j"); console.log('no ads', p.j?.s.noAds); }
   { const p = await as(u1, "select test_purchase('perles_100') j"); console.log('pack', p.j?.s.pearls); }
   await db.exec('update app_config set iap_test = false');
   console.log('purchase off', (await as(u1, "select test_purchase('perles_100') j")).error);
   { const ev = (await q('select event_at(g_now()) e'))[0].e; const c = await as(u1, 'select catch_creature() j');
     console.log('catch during', ev, c.j ? [c.j.reward, c.j.s.caught] : c.error, 'again:', (await as(u1, 'select catch_creature() j')).error); }
+  { const x = (await as(u1, 'select export_my_data() j')).j;
+    console.log('export', x.account.id === u1, x.tiles.length, 'tiles', x.purchases.length, 'purchases', x.survey_answers.length, 'surveys', x.referred_players, 'referred'); }
+  console.log('anon export', (await as('', 'select export_my_data() j')).error ? 'refused' : 'ALLOWED');
   // u2 was referred by u1: deleting u1 must keep u2 and remove all of u1's rows
   await as(u1, 'select delete_account()');
   const left = await q(`select (select count(*) from auth.users where id='${u1}') u, (select count(*) from profiles where id='${u1}') p,
     (select count(*) from tiles where owner='${u1}') t, (select count(*) from profiles where id='${u2}') other`);
   console.log('delete account', JSON.stringify(left[0]));
+  // retention: a player inactive for 3 years is purged, an active one stays
+  const u3 = '33333333-3333-3333-3333-333333333333';
+  await q('insert into auth.users values ($1)', [u3]); await as(u3, 'select get_state() j');
+  await db.exec(`update profiles set coins_at = coins_at - 3 * 366 * 86400000::bigint where id='${u2}'`);
+  console.log('purge', (await q('select purge_inactive() n'))[0].n, 'left', JSON.stringify(await q('select id from profiles')));
 })();

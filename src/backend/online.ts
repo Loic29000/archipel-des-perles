@@ -66,6 +66,11 @@ export function createOnlineBackend(url: string, anonKey: string): Backend {
       if (error) return [];
       return data as WorldTile[];
     },
+    async exportData() {
+      const { data, error } = await sb.rpc('export_my_data');
+      if (error) throw new GameError(error.message);
+      return data;
+    },
     async leaderboard() {
       const { data, error } = await sb.rpc('leaderboard');
       if (error) throw new GameError(error.message);
