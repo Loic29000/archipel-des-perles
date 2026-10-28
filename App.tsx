@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, Linking, PanResponder, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle as SvgCircle } from 'react-native-svg';
 import { Backend, createBackend } from './src/backend';
@@ -87,6 +87,18 @@ function Game() {
   const [pops, setPops] = useState<PopItem[]>([]);
   const [hudH, setHudH] = useState(0);
   const [sheetH, setSheetH] = useState(0);
+  // the bottom panel folds down to its tab bar so the whole map is in reach of the thumb
+  const [sheetOpen, setSheetOpen] = useState(true);
+  const { height: winH } = useWindowDimensions();
+  const sheetMax = Math.round(Math.min(300, Math.max(150, winH * 0.32)));
+  const openTab = (t: Tab) => { setTab(t); setSheetOpen(true); };
+  const handlePan = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 8,
+    onPanResponderRelease: (_e, g) => {
+      if (g.dy > 30) { setSheetOpen(false); buzz('light'); }
+      else if (g.dy < -30) { setSheetOpen(true); buzz('light'); }
+    },
+  }), []);
   const [demo, setDemo] = useState(false);
   // first launch (or new terms): the age screen and terms come before anything is created or sent
   const [gate, setGate] = useState(false);
@@ -438,7 +450,7 @@ function Game() {
           disabled={!claimable || short > 0 || busy} onPress={claimSelected} />
         {price > 0 && <T c={c} muted style={{ fontSize: 11, textAlign: 'center' }}>{price} perles = {R.pearlsInEuros(price)} si achetées · gratuites en jouant</T>}
         {claimable && short > 0 && (
-          <Pressable onPress={() => setTab('earn')}><T c={c} style={{ color: c.own, fontWeight: '700', fontSize: 13, textAlign: 'center' }}>Gagner des perles →</T></Pressable>
+          <Pressable onPress={() => openTab('earn')}><T c={c} style={{ color: c.own, fontWeight: '700', fontSize: 13, textAlign: 'center' }}>Gagner des perles →</T></Pressable>
         )}
       </Card>
     );
@@ -755,6 +767,45 @@ function Game() {
   ];
   const nextIsland = count === 0 ? 1 : Math.min(1, s.pearls / R.ISLAND_PRICE);
 
+  // ---------------------------------------------------------------- quick actions
+  /**
+   * Everything that can be collected right now, one thumb tap away above the tab bar, so a visit can last
+   * thirty seconds. When nothing is ready it says when the next reward comes, to give a reason to return.
+   */
+  function QuickActions() {
+    const items: { id: string; label: string; icon: React.ReactNode; hot?: boolean; onPress: () => void }[] = [];
+    if (streak.canClaim) items.push({ id: 'streak', hot: true, label: `Bonus du jour +${streak.reward}`, icon: <FlameIcon size={16} color={c.accentInk} />, onPress: () => setOverlay({ type: 'streak' }) });
+    if (ready(s!.cd.ad)) items.push({ id: 'ad', hot: true, label: 'Pub · +1 perle', icon: <TvIcon size={16} color={c.accentInk} />, onPress: () => watchAd('pearl', 'Publicité · +1 perle', () => reward('+1', 'pearl')) });
+    if (count > 0 && !boosting) items.push({ id: 'boost', label: 'Relancer le boost', icon: <BoltIcon size={16} color={c.ink} />, onPress: () => openTab('boost') });
+    if (questsReady) items.push({ id: 'quests', label: `${plural(questsReady, 'quête')} à récupérer`, icon: <ScrollIcon size={16} color={c.ink} />, onPress: () => openTab('quests') });
+    if (achReady) items.push({ id: 'ach', label: `${plural(achReady, 'succès')}`, icon: <TrophyIcon size={16} color={c.ink} />, onPress: () => { openTab('more'); setMore('log'); } });
+    if (count > 0 && s!.pearls >= R.ISLAND_PRICE) items.push({ id: 'island', label: 'Nouvel îlot possible', icon: <IslandIcon size={16} color={c.ink} />, onPress: () => { openTab('tile'); say('Touchez un îlot « ? » au bord de votre archipel.'); } });
+    if (ready(s!.cd.fish) || ready(s!.cd.memo)) items.push({ id: 'game', label: 'Mini-jeu prêt', icon: <BottleIcon size={16} color={c.ink} />, onPress: () => openTab('earn') });
+    if (ready(s!.cd.survey)) items.push({ id: 'survey', label: 'Sondage · +3', icon: <ClipboardIcon size={16} color={c.ink} />, onPress: () => openTab('earn') });
+    if (!items.length) {
+      const next = ([[s!.cd.ad, 'pub'], [Math.min(s!.cd.fish, s!.cd.memo), 'mini-jeu'], [s!.cd.survey, 'sondage'],
+        [streak.locked ? Infinity : (R.dayOf(now) + 1) * R.DAY, 'bonus du jour']] as [number, string][])
+        .filter(([t]) => t > now).sort((a, b) => a[0] - b[0])[0];
+      return (
+        <View style={[st.quickRow, { paddingHorizontal: 14, paddingVertical: 4 }]}>
+          <T c={c} muted style={{ fontSize: 12 }}>{next ? `Tout est récupéré · prochaine récompense (${next[1]}) dans ${dur(next[0] - now)}` : 'Tout est récupéré.'}</T>
+        </View>
+      );
+    }
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[st.quickRow, { paddingHorizontal: 10, gap: 6 }]}>
+        {items.map(x => (
+          <Pressable key={x.id} accessibilityRole="button" accessibilityLabel={x.label} disabled={busy}
+            onPress={() => { play('tap'); buzz('light'); x.onPress(); }}
+            style={({ pressed }) => [st.quick, { backgroundColor: x.hot ? c.accent : c.card, opacity: pressed ? 0.7 : 1 }]}>
+            {x.icon}
+            <T c={c} style={{ fontSize: 13, fontWeight: '700', color: x.hot ? c.accentInk : c.ink }}>{x.label}</T>
+          </Pressable>
+        ))}
+      </ScrollView>
+    );
+  }
+
   // ---------------------------------------------------------------- overlays
   function renderOverlay() {
     if (!overlay) return null;
@@ -898,11 +949,11 @@ function Game() {
   return (
     <View style={[st.root, { backgroundColor: c.seaDeep }]}>
       <StatusBar style={overlay?.type === 'settings' && c.scheme === 'light' ? 'dark' : 'light'} />
-      <HexMap s={s} others={others} selected={selected} focus={focus} zoom={zoom} c={c} disabled={busy} insetTop={hudH} insetBottom={sheetH}
+      <HexMap s={s} others={others} selected={selected} focus={focus} zoom={zoom} onZoom={setZoom} c={c} disabled={busy} insetTop={hudH} insetBottom={sheetH}
         creature={creature} onCreature={catchCreature}
         onSelect={(q, r) => {
           const kk = key(q, r);
-          if (s.tiles[kk] || others.has(kk) || R.isClaimable(s, q, r, x => others.has(x))) { setSelected([q, r]); setTab('tile'); play('tap'); }
+          if (s.tiles[kk] || others.has(kk) || R.isClaimable(s, q, r, x => others.has(x))) { setSelected([q, r]); openTab('tile'); play('tap'); buzz('light'); }
           else setSelected(null);
         }} />
 
@@ -918,27 +969,27 @@ function Game() {
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 {demo && <View style={[st.tag, { backgroundColor: c.accent }]}><T c={c} style={{ fontSize: 10, fontWeight: '700', color: c.accentInk }}>DÉMO</T></View>}
                 <Pressable accessibilityRole="button" accessibilityLabel={`Bonus de connexion, série de ${plural(streak.count, 'jour')}`} hitSlop={6}
-                  onPress={() => { play('tap'); setOverlay({ type: 'streak' }); }}
-                  style={[st.tag, { backgroundColor: streak.canClaim ? c.accent : c.card, flexDirection: 'row', gap: 3, alignItems: 'center' }]}>
-                  <FlameIcon size={13} color={streak.canClaim ? c.accentInk : '#e2694f'} />
-                  <T c={c} style={{ fontSize: 11, fontWeight: '700', color: streak.canClaim ? c.accentInk : c.ink }}>{streak.count}</T>
+                  onPress={() => { play('tap'); buzz('light'); setOverlay({ type: 'streak' }); }}
+                  style={[st.streakPill, { backgroundColor: streak.canClaim ? c.accent : c.card }]}>
+                  <FlameIcon size={16} color={streak.canClaim ? c.accentInk : '#e2694f'} />
+                  <T c={c} style={{ fontSize: 13, fontWeight: '700', color: streak.canClaim ? c.accentInk : c.ink }}>{streak.count}</T>
                   {streak.canClaim && <View style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: 5, backgroundColor: c.bad, borderWidth: 1.5, borderColor: c.panel }} />}
                 </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel="Paramètres" hitSlop={8} onPress={() => { play('tap'); setOverlay({ type: 'settings', page: 'settings' }); }}
                   style={[st.gear, { backgroundColor: c.card }]}>
-                  <GearIcon size={17} color={c.ink} />
+                  <GearIcon size={19} color={c.ink} />
                 </Pressable>
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 6 }}>
-              <Pressable onPress={() => setTab('earn')} style={[st.res, { backgroundColor: c.card }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Gagner des perles" onPress={() => openTab('earn')} style={[st.res, { backgroundColor: c.card }]}>
                 <PearlIcon size={24} />
                 <View>
                   <T c={c} num style={{ fontSize: 16, fontWeight: '700' }}>{fmtInt(s.pearls)}</T>
                   <T c={c} muted style={st.resLabel}>perles</T>
                 </View>
               </Pressable>
-              <Pressable onPress={() => { setTab('more'); setMore('shop'); }} style={[st.res, { backgroundColor: c.card, flex: 1.6 }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Comptoir" onPress={() => { openTab('more'); setMore('shop'); }} style={[st.res, { backgroundColor: c.card, flex: 1.6 }]}>
                 <CoinIcon size={24} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <T c={c} num style={{ fontSize: 14, fontWeight: '700' }} numberOfLines={1}>{fmtCoins(live.coins)}</T>
@@ -956,9 +1007,9 @@ function Game() {
           </View>
 
           {/* ---- map controls */}
-          <View style={st.mapRow} pointerEvents="box-none">
+          <View style={[st.mapRow, { top: hudH + 8 }]} pointerEvents="box-none">
             <View style={{ flexShrink: 1 }} pointerEvents="box-none">
-            <Pressable onPress={() => setTab('boost')}
+            <Pressable accessibilityRole="button" onPress={() => openTab('boost')}
               style={[st.chip, { alignSelf: 'flex-start', backgroundColor: boosting ? (sup ? c.bad : c.accent) : c.panel, borderColor: boosting ? 'transparent' : c.line }]}>
               <BoltIcon size={15} color={boosting ? (sup ? '#fff' : c.accentInk) : c.muted} />
               <T c={c} num style={{ fontSize: 12, fontWeight: '700', color: boosting ? (sup ? '#fff' : c.accentInk) : c.ink }}>
@@ -966,7 +1017,7 @@ function Game() {
               </T>
             </Pressable>
             {ev && (
-              <Pressable onPress={() => setTab('quests')} style={[st.chip, { backgroundColor: '#1d4e89', borderColor: 'transparent', marginTop: 6, alignSelf: 'flex-start' }]}>
+              <Pressable accessibilityRole="button" onPress={() => openTab('quests')} style={[st.chip, { backgroundColor: '#1d4e89', borderColor: 'transparent', marginTop: 6, alignSelf: 'flex-start' }]}>
                 <Svg width={18} height={18} viewBox="-24 -24 48 48"><CreatureArt kind={ev.creature} /></Svg>
                 <T c={c} style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>{ev.name} · {dur(R.eventEndsIn(now))}</T>
               </Pressable>
@@ -991,14 +1042,21 @@ function Game() {
                 <T c={c} style={{ color: c.paper, fontSize: 13, textAlign: 'center' }}>{toast}</T>
               </View>
             )}
-            <ScrollView style={{ maxHeight: 268 }} contentContainerStyle={{ padding: 12, paddingBottom: 6 }}>
-              {tabBody[tab]()}
-            </ScrollView>
+            <Pressable {...handlePan.panHandlers} accessibilityRole="button" accessibilityLabel={sheetOpen ? 'Replier le panneau' : 'Déplier le panneau'}
+              onPress={() => { buzz('light'); setSheetOpen(o => !o); }} style={st.handle}>
+              <View style={[st.grabber, { backgroundColor: c.line }]} />
+            </Pressable>
+            <QuickActions />
+            {sheetOpen && (
+              <ScrollView style={{ maxHeight: sheetMax }} contentContainerStyle={{ padding: 12, paddingTop: 4, paddingBottom: 6 }}>
+                {tabBody[tab]()}
+              </ScrollView>
+            )}
             <View style={[st.tabBar, { borderColor: c.line }]}>
               {TABS.map(([id, label, Icon, badge]) => {
-                const on = tab === id;
+                const on = tab === id && sheetOpen;
                 return (
-                  <Pressable key={id} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected: on }} onPress={() => { play('tap'); setTab(id); }} style={st.tabBtn}>
+                  <Pressable key={id} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected: on }} onPress={() => { play('tap'); buzz('light'); if (on && sheetOpen) setSheetOpen(false); else openTab(id); }} style={st.tabBtn}>
                     <View style={[st.tabIcon, on && { backgroundColor: c.accent }]}>
                       <Icon size={21} color={on ? c.accentInk : c.muted} />
                       {!!badge && <Badge c={c} n={badge} />}
@@ -1059,9 +1117,14 @@ const st = StyleSheet.create({
   res: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, paddingHorizontal: 10, borderRadius: 14 },
   resLabel: { fontSize: 10, letterSpacing: 0.4 },
   tag: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
-  gear: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: -3, marginBottom: -3 },
-  mapRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, borderWidth: 1,
+  gear: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginVertical: -5 },
+  streakPill: { height: 36, borderRadius: 18, paddingHorizontal: 11, flexDirection: 'row', gap: 4, alignItems: 'center', marginVertical: -5 },
+  handle: { alignItems: 'center', justifyContent: 'center', height: 30, marginBottom: -6 },
+  grabber: { width: 44, height: 5, borderRadius: 3 },
+  quickRow: { paddingBottom: 4, alignItems: 'center' },
+  quick: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, paddingHorizontal: 12, borderRadius: 999 },
+  mapRow: { position: 'absolute', left: 10, right: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 40, paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, borderWidth: 1,
     shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
   iconBtn: { width: 40, height: 40, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3 },

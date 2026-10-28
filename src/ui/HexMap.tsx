@@ -23,6 +23,8 @@ interface Props {
   /** An event creature swimming at a sea hex; tapping it calls onCreature. */
   creature?: { q: number; r: number; kind: 'tortue' | 'coquillage' | 'baleine' } | null;
   onCreature?: () => void;
+  /** Two-finger pinch: the new hex size the player asked for. */
+  onZoom?: (size: number) => void;
 }
 
 const SQ3 = Math.sqrt(3);
@@ -36,7 +38,7 @@ function pixToHex(x: number, y: number, size: number): [number, number] {
   else if (dr > ds) r = -q - s;
   return [q, r];
 }
-function HexMapImpl({ s, others, selected, onSelect, focus, zoom, c, disabled, insetTop = 0, insetBottom = 0, creature, onCreature }: Props) {
+function HexMapImpl({ s, others, selected, onSelect, focus, zoom, c, disabled, insetTop = 0, insetBottom = 0, creature, onCreature, onZoom }: Props) {
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [cam, setCam] = useState({ x: 0, y: 0 });
   const size = zoom;
@@ -45,8 +47,8 @@ function HexMapImpl({ s, others, selected, onSelect, focus, zoom, c, disabled, i
   const viewRef = useRef<View>(null);
   const origin = useRef({ x: 0, y: 0 });
   const cy = insetTop + Math.max(0, box.h - insetTop - insetBottom) / 2;
-  const live = useRef({ size, box, onSelect, disabled, cy });
-  live.current = { size, box, onSelect, disabled, cy };
+  const live = useRef({ size, box, onSelect, disabled, cy, onZoom });
+  live.current = { size, box, onSelect, disabled, cy, onZoom };
 
   useEffect(() => {
     const p = toPix(focus.at[0], focus.at[1], size);
@@ -64,18 +66,33 @@ function HexMapImpl({ s, others, selected, onSelect, focus, zoom, c, disabled, i
 
   const pan = useMemo(() => {
     let start = { x: 0, y: 0 }, moved = false;
+    let pinch: { dist: number; size: number } | null = null;
+    const spread = (e: GestureResponderEvent) => {
+      const [a, b] = e.nativeEvent.touches;
+      return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+    };
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: () => {
-        start = { ...camRef.current }; moved = false;
+        start = { ...camRef.current }; moved = false; pinch = null;
         // page coordinates are reliable on every platform; locationX can be relative to an SVG child on web
         const node = viewRef.current as unknown as { getBoundingClientRect?: () => DOMRect } | null;
         const rect = node?.getBoundingClientRect?.();
         if (rect) origin.current = { x: rect.left + window.scrollX, y: rect.top + window.scrollY };
         else viewRef.current?.measure((_x, _y, _w, _h, px, py) => { origin.current = { x: px, y: py }; });
       },
-      onPanResponderMove: (_e, g) => {
+      onPanResponderMove: (e, g) => {
+        if (e.nativeEvent.touches?.length >= 2) {
+          // pinch to zoom; panning resumes from wherever the camera ends up
+          moved = true;
+          const d = spread(e);
+          if (!pinch) pinch = { dist: d, size: live.current.size };
+          else if (pinch.dist > 0) live.current.onZoom?.(Math.max(14, Math.min(56, pinch.size * d / pinch.dist)));
+          start = { x: camRef.current.x + g.dx, y: camRef.current.y + g.dy };
+          return;
+        }
+        if (pinch) return; // one finger lifted after a pinch: wait for release
         if (Math.hypot(g.dx, g.dy) > 6) moved = true;
         if (moved) setCam({ x: start.x - g.dx, y: start.y - g.dy });
       },

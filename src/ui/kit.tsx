@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, TextInput, TextStyle, View, ViewStyle } from 'react-native';
-import { play } from '../services/feedback';
+import { buzz, play } from '../services/feedback';
 import { fontFor, Palette } from './theme';
 
 export function Btn({ c, label, onPress, disabled, kind = 'primary', small, style, icon }: {
@@ -13,7 +13,7 @@ export function Btn({ c, label, onPress, disabled, kind = 'primary', small, styl
     <Pressable
       accessibilityRole="button"
       disabled={disabled}
-      onPress={() => { play('tap'); onPress(); }}
+      onPress={() => { play('tap'); buzz('light'); onPress(); }}
       style={({ pressed }) => [
         styles.btn,
         small && styles.small,
@@ -117,7 +117,7 @@ export const CodeField = ({ c, onSave }: { c: Palette; onSave: (v: string) => vo
 
 export const styles = StyleSheet.create({
   btn: { flexDirection: 'row', gap: 6, paddingVertical: 11, paddingHorizontal: 16, borderRadius: 14, borderBottomWidth: 3, alignItems: 'center', justifyContent: 'center' },
-  small: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12 },
+  small: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, minHeight: 40 },
   btnText: { fontSize: 14 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   divider: { borderBottomWidth: StyleSheet.hairlineWidth },

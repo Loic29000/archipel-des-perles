@@ -18,6 +18,10 @@ Application Expo (React Native) pour iOS, Android et le web, avec un serveur Sup
 
 Fonctionnalités : quêtes du jour, bonus de connexion façon Atlas Earth (dès 3 îlots, à récupérer chaque jour, 1 perle par jour et gros bonus aux jours 7, 14, 21, 30, 45, 60, 75 et 90 sur un cycle de 90 jours, remis à zéro si un jour est manqué), biome à l'honneur chaque semaine (+25 %), comptoir (doublons → perles, phares +10 % par niveau, drapeaux), classement, voisins visibles sur la carte, parrainage (+10 perles chacun), tutoriel, animation de révélation, sons, vibrations, rappels locaux, mode démo (1 s = 10 min).
 
+## Confort sur téléphone
+
+Bandeau « à faire maintenant » au-dessus des onglets (bonus du jour, pub prête, boost à relancer, quêtes, succès, mini-jeux), qui annonce la prochaine récompense quand tout est récupéré. Panneau du bas repliable (poignée, glisser vers le bas, ou toucher l'onglet ouvert), zoom à deux doigts sur la carte, zones tactiles d'au moins 40 px, vibration légère à chaque action. Version web installable sur l'écran d'accueil (`public/manifest.json`, `public/index.html`), sans rebond ni zoom au double tap.
+
 ## Lancer en local
 
 ```bash
