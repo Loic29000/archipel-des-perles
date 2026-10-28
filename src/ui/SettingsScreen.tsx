@@ -246,7 +246,7 @@ function InfoPanel({ c, online, account, onDoc }: { c: Palette; online: boolean;
       </Section>
 
       <Section c={c} title="Crédits">
-        <P c={c}>Archipel des Perles : conception, illustrations et code originaux.</P>
+        <P c={c}>Conception, illustrations et code originaux.</P>
         <P c={c}>Polices Unbounded et Figtree sous licence SIL Open Font License, intégrées à l’application. Construit avec Expo, React Native et react-native-svg{online ? ', serveur Supabase' : ''}.</P>
       </Section>
 

@@ -242,7 +242,7 @@ function Game() {
   if (fatal) {
     return (
       <SafeAreaView style={[st.root, { backgroundColor: c.paper, padding: 20, gap: 12 }]}>
-        <T c={c} display style={{ fontWeight: '700' }}>Archipel des Perles</T>
+        <T c={c} display style={{ fontWeight: '700' }}>Oups, un souci</T>
         <T c={c}>{fatal}</T>
         <Btn c={c} label="Réessayer" onPress={() => setFatal(null)} />
       </SafeAreaView>
@@ -961,10 +961,16 @@ function Game() {
         <View style={st.app} pointerEvents="box-none">
           {/* ---- resources */}
           <View onLayout={e => setHudH(e.nativeEvent.layout.height + e.nativeEvent.layout.y)} style={[st.hud, { backgroundColor: c.panel, borderColor: c.line }]}>
-            <View style={[k.row, { gap: 6 }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 }}>
-                <T c={c} display style={{ fontWeight: '700', fontSize: 15, flexShrink: 1 }} numberOfLines={1}>Archipel des Perles</T>
-                {pass && <CompassIcon size={16} color={c.accentDeep} />}
+            <View style={[k.row, { gap: 12 }]}>
+              <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                <View style={[k.row, { gap: 6 }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 }}>
+                    {pass && <CompassIcon size={14} color={c.accentDeep} />}
+                    <T c={c} style={{ fontSize: 11, fontWeight: '700', flexShrink: 1 }} numberOfLines={1}>{count === 0 ? 'Premier îlot offert' : `${plural(count, 'îlot')} · prochain îlot`}</T>
+                  </View>
+                  <T c={c} num style={{ fontSize: 11 }}>{count === 0 ? 'gratuit' : `${Math.min(s.pearls, R.ISLAND_PRICE)}/${R.ISLAND_PRICE}`}</T>
+                </View>
+                <Progress c={c} value={nextIsland} color={nextIsland >= 1 ? c.good : c.accent} height={7} />
               </View>
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 {demo && <View style={[st.tag, { backgroundColor: c.accent }]}><T c={c} style={{ fontSize: 10, fontWeight: '700', color: c.accentInk }}>DÉMO</T></View>}
@@ -996,13 +1002,6 @@ function Game() {
                   <T c={c} muted style={st.resLabel} numberOfLines={1}>+{fmtCoins(rate * 86400)} / jour</T>
                 </View>
               </Pressable>
-            </View>
-            <View style={{ gap: 4 }}>
-              <View style={k.row}>
-                <T c={c} style={{ fontSize: 11, fontWeight: '700' }}>{count === 0 ? 'Premier îlot offert' : `${plural(count, 'îlot')} · prochain îlot`}</T>
-                <T c={c} num style={{ fontSize: 11 }}>{count === 0 ? 'gratuit' : `${Math.min(s.pearls, R.ISLAND_PRICE)}/${R.ISLAND_PRICE}`}</T>
-              </View>
-              <Progress c={c} value={nextIsland} color={nextIsland >= 1 ? c.good : c.accent} height={7} />
             </View>
           </View>
 

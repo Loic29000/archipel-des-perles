@@ -31,7 +31,7 @@ export function WelcomeGate({ c, ageGroup, onDone }: { c: Palette; ageGroup: Age
         <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }}>
           <View style={[st.card, { backgroundColor: c.panel, borderColor: c.accent }]}>
             <View style={{ alignSelf: 'center' }}><PearlIcon size={56} /></View>
-            <T c={c} display style={{ fontWeight: '700', fontSize: 20, textAlign: 'center' }}>{askAge ? 'Archipel des Perles' : 'Nos conditions ont changé'}</T>
+            <T c={c} display style={{ fontWeight: '700', fontSize: 20, textAlign: 'center' }}>{askAge ? 'Bienvenue à bord' : 'Nos conditions ont changé'}</T>
             <T c={c} muted style={{ textAlign: 'center', lineHeight: 20 }}>
               {askAge ? 'Avant de lever l’ancre, deux petites choses.' : 'Merci de les relire et de les accepter pour continuer à jouer.'}
             </T>
